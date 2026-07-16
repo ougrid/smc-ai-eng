@@ -1,0 +1,1 @@
+OPENAI_API_KEY is missing or invalid in this cloud environment -- Day 3 requires it to build and verify the LangGraph routing/synthesis nodes. Add a valid key to this environment's configuration and re-run this routine.
