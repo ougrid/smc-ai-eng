@@ -1,5 +1,14 @@
 # smc-ai-eng — Financial Q&A Chatbot (Take-Home Assignment)
 
+## Start here
+
+Before writing or changing code, read the plan:
+
+- **`docs/implementation-plan.md`** — strategy: confirmed stack, verified data facts, agent design (no-hallucination graph incl. intent gate/clarify), API/frontend contracts, day-by-day schedule, verification approach, future-improvements roadmap.
+- **`docs/technical-execution-plan.md`** — execution detail: docker-compose, config surface, loader implementation, backend module contracts, LangGraph wiring, SSE wire format, frontend contracts, init commands, test matrix, commit plan.
+
+These are the source of truth for scope and design decisions already made — don't re-derive or re-litigate them.
+
 ## What this is
 
 A locally-run Q&A chatbot that answers financial questions about U.S. public
@@ -62,7 +71,6 @@ language the user asks in.
 
 ## Repo conventions
 
-- `agent-output/` — scratch space for AI-agent-generated artifacts (analysis
-  notes, generated reports, intermediate outputs) during development. Gitignored;
-  never a source of truth, never referenced by the app.
+- `docs/` — tracked, durable design docs (the plan files above). Committed and pushed so any session (local or cloud) has full context.
+- `agent-output/` — scratch space for disposable AI-agent-generated artifacts (superseded plan drafts, research notes) during development. Gitignored; never a source of truth, never referenced by the app. Promote a file out of here into `docs/` once it becomes the actual spec being implemented from.
 - Work happens on `dev`; keep `main` as the clean baseline branch.
