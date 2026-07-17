@@ -51,16 +51,26 @@ data without concluding. If asked "why" and a company's why cannot be \
 grounded (see coverage notes), say so explicitly for that company rather \
 than omitting it.
 
-LANGUAGE (critical, check this last before responding): write the ENTIRE \
-`answer` in the same language as the user's question below, even though the \
-evidence (SQL rows, 10-K excerpts) is in English -- translate the substance, \
-don't just copy English sentences. A Thai question gets a Thai answer in \
-Thai script; an English question gets an English answer. Company names, \
-tickers, and dollar figures may stay as-is.\
+LANGUAGE (critical, check this last before responding): the human message \
+below states a TARGET LANGUAGE explicitly -- write the ENTIRE `answer` in \
+that exact language, even though the evidence (SQL rows, 10-K excerpts) is \
+in English, and even if other examples in this system prompt are in a \
+different language -- translate the substance, don't just copy English \
+sentences, and don't switch language because the evidence or an example \
+happens to be in one. Company names, tickers, and dollar figures may stay \
+as-is.\
 """
 
 _NO_EVIDENCE_ANSWER = "I don't have grounded data available to answer this question."
 _MALFORMED_ANSWER = "I couldn't process this question -- please try rephrasing it."
+
+_LANGUAGE_NAMES = {"en": "English", "th": "Thai"}
+
+
+def _language_directive(state: AgentState) -> str:
+    code = ((state.get("route") or {}).get("language") or "en").strip().lower()
+    name = _LANGUAGE_NAMES.get(code, code)
+    return f'TARGET LANGUAGE: {name} ("{code}"). Write `answer` entirely in {name}.'
 
 
 class SynthesisLLM(Protocol):
@@ -120,9 +130,7 @@ def build_synthesize_node(synth_llm: SynthesisLLM):
             return {"envelope": None, "final_answer": _NO_EVIDENCE_ANSWER}
 
         human_message = (
-            f"Question: {state['question']}\n\n"
-            f"Evidence:\n{_format_evidence(state)}\n\n"
-            "Reminder: write `answer` in the same language as the Question above."
+            f"Question: {state['question']}\n\n" f"Evidence:\n{_format_evidence(state)}"
         )
         prior_verify = state.get("verify")
         if prior_verify and not prior_verify.get("ok"):
@@ -133,6 +141,11 @@ def build_synthesize_node(synth_llm: SynthesisLLM):
                 "ONLY numbers that appear in the evidence -- drop or rephrase any claim "
                 "you cannot support instead of repeating an unverifiable figure."
             )
+        # Last thing the model reads -- recency helps instruction-following,
+        # and this is the exact bug the language directive exists to prevent
+        # (see agent-output/day3-smoke-test-findings.md and the Day-4 fix:
+        # an English question got a Thai answer when this was left implicit).
+        human_message += f"\n\n{_language_directive(state)}"
 
         messages: list[tuple[str, str]] = [
             ("system", SYNTHESIS_SYSTEM_PROMPT),

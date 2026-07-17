@@ -86,6 +86,41 @@ def test_fails_closed_after_second_malformed_response():
     assert llm.calls == 2
 
 
+def test_language_directive_uses_route_detected_language_not_question_text():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="answer"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node(
+        {
+            "question": "What was Apple's net income from 2022 to 2025?",
+            "sql_rows": [{"company": "Apple", "year": 2025}],
+            "route": {"language": "en"},
+        },
+        {},
+    )
+    human_message = captured["messages"][1][1]
+    assert 'TARGET LANGUAGE: English ("en")' in human_message
+
+
+def test_language_directive_defaults_to_english_when_route_missing():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="answer"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node({"question": "q", "sql_rows": [{"company": "Apple", "year": 2025}]}, {})
+    human_message = captured["messages"][1][1]
+    assert 'TARGET LANGUAGE: English ("en")' in human_message
+
+
 def test_verify_retry_hint_reaches_the_llm_prompt():
     captured = {}
 
