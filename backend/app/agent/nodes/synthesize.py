@@ -1,0 +1,108 @@
+"""synthesize: strict evidence-only contract. Quantitative claims must come
+from SQL rows/computed growth figures only; qualitative claims must be
+attributed with a [Source, p.N] citation matching a retrieved chunk;
+coverage notes get reproduced verbatim where relevant; the answer is in
+the question's language.
+
+Empty evidence is a deterministic refusal handled *before* the LLM call --
+cheaper and more reliable than trusting prompt discipline alone (the Day-4
+`verify` node is the second, numeric-consistency line of defense on top of
+this).
+
+Bound the same way as the route node: `with_structured_output(...,
+strict=True, include_raw=True)`, tagged "synthesize" so the SSE emitter can
+filter its token stream to just this node's output; same
+one-re-ask-then-refuse policy on `parsed=None`.
+"""
+
+from typing import Any, Protocol
+
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
+
+from app.agent.schemas import SynthesisEnvelope
+from app.agent.state import AgentState
+
+SYNTHESIS_SYSTEM_PROMPT = """\
+You answer financial questions using ONLY the evidence provided below. \
+Never invent numbers or facts. Quantitative claims must come only from the \
+SQL rows / computed growth figures given. Qualitative claims must carry a \
+[Source, p.N] citation matching a provided 10-K excerpt. Ignore print-to-PDF \
+header/footer noise in excerpts (timestamps, file paths). Reproduce any \
+coverage notes verbatim where relevant (e.g. noting a company's "why" \
+cannot be grounded because it has no 10-K indexed). Answer in the same \
+language as the question.\
+"""
+
+_NO_EVIDENCE_ANSWER = "I don't have grounded data available to answer this question."
+_MALFORMED_ANSWER = "I couldn't process this question -- please try rephrasing it."
+
+
+class SynthesisLLM(Protocol):
+    def invoke(self, messages: list, config: RunnableConfig | None = None) -> dict[str, Any]: ...
+
+
+def build_synthesis_llm(llm: BaseChatModel) -> SynthesisLLM:
+    return llm.with_structured_output(
+        SynthesisEnvelope, method="json_schema", strict=True, include_raw=True
+    ).with_config(tags=["synthesize"])
+
+
+def _has_evidence(state: AgentState) -> bool:
+    return bool(state.get("sql_rows") or state.get("chunks"))
+
+
+def _format_evidence(state: AgentState) -> str:
+    parts: list[str] = []
+    if state.get("sql_rows"):
+        parts.append(f"SQL rows: {state['sql_rows']}")
+    if state.get("computed"):
+        parts.append(f"Computed growth figures: {state['computed']}")
+    if state.get("chunks"):
+        lines = [f"[{c['source']}, p.{c['page']}] {c['text']}" for c in state["chunks"]]
+        parts.append("10-K excerpts:\n" + "\n".join(lines))
+    if state.get("coverage_notes"):
+        parts.append(
+            "Coverage notes (reproduce verbatim where relevant): "
+            + "; ".join(state["coverage_notes"])
+        )
+    return "\n\n".join(parts)
+
+
+def _invoke_with_reask(
+    synth_llm: SynthesisLLM, messages: list[tuple[str, str]], config: RunnableConfig | None
+) -> SynthesisEnvelope | None:
+    result = synth_llm.invoke(messages, config=config)
+    if result["parsed"] is not None:
+        return result["parsed"]
+
+    error_text = str(result.get("parsing_error") or "response did not match the required schema")
+    retry_messages = [
+        *messages,
+        (
+            "human",
+            f"Your previous response was invalid: {error_text}. "
+            "Respond again, strictly matching the required schema.",
+        ),
+    ]
+    result = synth_llm.invoke(retry_messages, config=config)
+    return result["parsed"]
+
+
+def build_synthesize_node(synth_llm: SynthesisLLM):
+    def _node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
+        if not _has_evidence(state):
+            return {"envelope": None, "final_answer": _NO_EVIDENCE_ANSWER}
+
+        messages: list[tuple[str, str]] = [
+            ("system", SYNTHESIS_SYSTEM_PROMPT),
+            ("human", f"Question: {state['question']}\n\nEvidence:\n{_format_evidence(state)}"),
+        ]
+        envelope = _invoke_with_reask(synth_llm, messages, config)
+
+        if envelope is None:
+            return {"envelope": None, "final_answer": _MALFORMED_ANSWER}
+
+        return {"envelope": envelope.model_dump(), "final_answer": envelope.answer}
+
+    return _node
