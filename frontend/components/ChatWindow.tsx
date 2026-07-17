@@ -40,8 +40,12 @@ export function ChatWindow() {
               Ask a financial question to get started.
             </p>
           )}
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+          {messages.map((message, index) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              isStreaming={busy && index === messages.length - 1}
+            />
           ))}
         </div>
       </ScrollArea>
