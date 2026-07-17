@@ -16,6 +16,7 @@ from sqlalchemy import Engine, text
 
 from app.auth.models import User  # noqa: F401 -- import registers the table with Base.metadata
 from app.auth.router import router as auth_router
+from app.chat.router import router as chat_router
 from app.clients.pinecone_client import resolve_index, vector_count
 from app.config import Settings, get_settings
 from app.db import Base, build_agent_ro_engine, build_engine
@@ -61,6 +62,7 @@ def create_app(
     )
 
     app.include_router(auth_router)
+    app.include_router(chat_router)
 
     @app.get("/api/health")
     def health() -> dict:

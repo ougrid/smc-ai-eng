@@ -131,3 +131,8 @@ def test_me_requires_token(client):
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["email"] == "c@example.com"
+
+
+def test_chat_requires_token(client):
+    resp = client.post("/api/chat", json={"messages": []})
+    assert resp.status_code == 401
