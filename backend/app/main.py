@@ -14,9 +14,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, text
 
+from app.auth.models import User  # noqa: F401 -- import registers the table with Base.metadata
+from app.auth.router import router as auth_router
 from app.clients.pinecone_client import resolve_index, vector_count
 from app.config import Settings, get_settings
-from app.db import build_agent_ro_engine, build_engine
+from app.db import Base, build_agent_ro_engine, build_engine
 
 
 def create_app(
@@ -35,6 +37,7 @@ def create_app(
         app.state.engine = (
             engine if engine is not None else build_engine(resolved_settings.database_url)
         )
+        Base.metadata.create_all(app.state.engine)
         app.state.agent_engine = (
             agent_engine
             if agent_engine is not None
@@ -56,6 +59,8 @@ def create_app(
         allow_headers=["Authorization", "Content-Type"],
         expose_headers=["x-vercel-ai-ui-message-stream"],
     )
+
+    app.include_router(auth_router)
 
     @app.get("/api/health")
     def health() -> dict:

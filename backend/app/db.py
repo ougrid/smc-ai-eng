@@ -7,12 +7,26 @@ must physically be unable to reach the `users` table, which is enforced at
 the Postgres role level (see scripts/initdb/02_roles.sql), not just in code.
 """
 
+from typing import Iterator
+
+from fastapi import Request
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import DeclarativeBase, Session
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 def build_engine(url: str) -> Engine:
     """App-role engine (read/write, e.g. for the users table)."""
     return create_engine(url, pool_pre_ping=True)
+
+
+def get_session(request: Request) -> Iterator[Session]:
+    """FastAPI dependency yielding a session against the app-role engine."""
+    with Session(request.app.state.engine) as session:
+        yield session
 
 
 def build_agent_ro_engine(url: str) -> Engine:
