@@ -35,9 +35,30 @@ def build_vector_retrieve_node(vector_tool: VectorTool):
     def _node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         query = _reformulate(state["question"], state.get("metrics", []))
         result = vector_tool.query(query, state.get("vector_companies", []))
+        chunks = [asdict(c) for c in result.chunks]
+
+        # Deterministic gap detection: a company can be vector-eligible (has an
+        # indexed 10-K) yet still end up with zero kept chunks for THIS question
+        # (everything retrieved was below-floor or boilerplate). Left silent,
+        # the Day-3 smoke test found the model just drops that company's
+        # qualitative half rather than flagging it -- so surface it the same
+        # way the existing "no 10-K at all" gap is surfaced: as a coverage
+        # note the synthesis prompt is already instructed to reproduce verbatim.
+        covered = {c["company"] for c in chunks}
+        notes = list(state.get("coverage_notes", []))
+        for company in state.get("vector_companies", []):
+            if company not in covered:
+                notes.append(
+                    f"No substantive 10-K excerpts were retrieved for {company} to "
+                    f"ground the qualitative portion of this question -- state "
+                    f"explicitly that this cannot be grounded for {company}, "
+                    "don't omit it."
+                )
+
         return {
-            "chunks": [asdict(c) for c in result.chunks],
+            "chunks": chunks,
             "rejected_chunks": [asdict(c) for c in result.rejected],
+            "coverage_notes": notes,
         }
 
     return _node

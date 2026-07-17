@@ -28,10 +28,17 @@ You answer financial questions using ONLY the evidence provided below. \
 Never invent numbers or facts. Quantitative claims must come only from the \
 SQL rows / computed growth figures given. Qualitative claims must carry a \
 [Source, p.N] citation matching a provided 10-K excerpt. Ignore print-to-PDF \
-header/footer noise in excerpts (timestamps, file paths). Reproduce any \
-coverage notes verbatim where relevant (e.g. noting a company's "why" \
-cannot be grounded because it has no 10-K indexed) -- do not silently drop \
-them.
+header/footer noise in excerpts (timestamps, file paths).
+
+COVERAGE NOTES MUST APPEAR IN THE ANSWER TEXT ITSELF, not just be available \
+as side metadata. Every coverage note given below (e.g. a company has no \
+10-K indexed, or no substantive excerpts were retrieved for a company for \
+this question) describes a real gap in what you can ground -- write one \
+explicit sentence per such note as part of `answer`, naming the company and \
+saying plainly that it cannot be grounded for the reason given. Do this even \
+when it means the qualitative half of the answer is only a gap statement \
+with no citation. Never let a coverage note exist only in the notes list \
+while the answer text stays silent about it.
 
 These are ACTUAL reported historical figures from SQL records and filed \
 10-Ks, never projections or forecasts -- do not say "expected to have", \

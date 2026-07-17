@@ -40,6 +40,41 @@ def test_reformulates_with_generic_hint_when_no_metrics():
     assert "business strategy" in query
 
 
+def test_zero_kept_chunks_for_a_vector_eligible_company_adds_coverage_note():
+    tool = _StubVectorTool(VectorResult())  # no chunks kept for either company
+    node = build_vector_retrieve_node(tool)
+    out = node({"question": "why did they grow?", "vector_companies": ["Apple", "Meta"]}, {})
+    assert len(out["coverage_notes"]) == 2
+    assert any("Apple" in n for n in out["coverage_notes"])
+    assert any("Meta" in n for n in out["coverage_notes"])
+
+
+def test_covered_company_gets_no_gap_note_but_uncovered_one_does():
+    result = VectorResult(
+        chunks=[Chunk(id="c1", company="Meta", source="Meta_10K.pdf", page=5, text="...", score=0.8)]
+    )
+    tool = _StubVectorTool(result)
+    node = build_vector_retrieve_node(tool)
+    out = node({"question": "why did they grow?", "vector_companies": ["Apple", "Meta"]}, {})
+    assert len(out["coverage_notes"]) == 1
+    assert "Apple" in out["coverage_notes"][0]
+
+
+def test_existing_coverage_notes_are_preserved_not_overwritten():
+    tool = _StubVectorTool(VectorResult())
+    node = build_vector_retrieve_node(tool)
+    out = node(
+        {
+            "question": "q",
+            "vector_companies": ["Apple"],
+            "coverage_notes": ["Microsoft has no 10-K indexed"],
+        },
+        {},
+    )
+    assert "Microsoft has no 10-K indexed" in out["coverage_notes"]
+    assert any("Apple" in n for n in out["coverage_notes"])
+
+
 def test_serializes_chunks_and_rejected_into_plain_dicts():
     result = VectorResult(
         chunks=[Chunk(id="c1", company="Meta", source="Meta_10K.pdf", page=5, text="...", score=0.8)],
