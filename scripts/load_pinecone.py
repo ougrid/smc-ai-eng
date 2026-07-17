@@ -31,11 +31,15 @@ COMPANY_BY_FILE = {
 
 def resolve_data_plane_host(pc: Pinecone, index_name: str) -> str:
     """Resolve the data-plane host for an index. Never hardcode the port --
-    pinecone-local assigns each index a port in 5081-5090."""
+    pinecone-local assigns each index a port in 5081-5090.
+
+    describe_index() reports the host as `https://...`, but pinecone-local's
+    data plane does not actually speak TLS -- force http regardless of
+    whatever scheme (or lack of one) is reported.
+    """
     host = pc.describe_index(index_name).host
-    if not host.startswith("http"):
-        host = f"http://{host}"
-    return host
+    host = host.split("://", 1)[-1]
+    return f"http://{host}"
 
 
 def normalize_record(record: dict) -> dict:
