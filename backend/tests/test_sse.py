@@ -204,6 +204,93 @@ async def test_clarify_sequence_has_no_citations_or_verify_part():
     assert text_delta["delta"] == "Which company do you mean?"
 
 
+def _verify_event(ok, ungrounded, attempt):
+    return {
+        "event": "on_chain_end",
+        "name": "verify",
+        "tags": [],
+        "data": {"output": {"verify": {"ok": ok, "ungrounded": ungrounded, "attempt": attempt}}},
+    }
+
+
+def _synthesize_end_event(final_answer):
+    return {
+        "event": "on_chain_end",
+        "name": "synthesize",
+        "tags": [],
+        "data": {"output": {"final_answer": final_answer}},
+    }
+
+
+@pytest.mark.asyncio
+async def test_stream_veto_retry_uses_a_fresh_draft_id_and_reconciles_verify_part():
+    envelope_1 = json.dumps({"reasoning": "r", "answer": "fabricated $999,999M", "citations": []})
+    envelope_2 = json.dumps({"reasoning": "r", "answer": "corrected $93,736M", "citations": []})
+    scripted = [
+        *_chat_model_stream_events(envelope_1),
+        _synthesize_end_event("fabricated $999,999M"),
+        _verify_event(False, ["999,999"], 1),
+        *_chat_model_stream_events(envelope_2),
+        _synthesize_end_event("corrected $93,736M"),
+        _verify_event(True, [], 2),
+    ]
+
+    lines = await _collect(scripted)
+    parsed = _types_of(lines)
+
+    text_starts = [p for p in parsed if p["type"] == "text-start"]
+    text_ends = [p for p in parsed if p["type"] == "text-end"]
+    assert [p["id"] for p in text_starts] == ["draft-1", "draft-2"]
+    assert [p["id"] for p in text_ends] == ["draft-1", "draft-2"]
+
+    verify_parts = [p for p in parsed if p["type"] == "data-verify"]
+    assert len(verify_parts) == 2
+    assert all(p["id"] == "verify-1" for p in verify_parts)
+    assert verify_parts[0]["data"]["ok"] is False
+    assert verify_parts[1]["data"]["ok"] is True
+
+    draft_2_deltas = "".join(
+        p["delta"]
+        for p in parsed
+        if p["type"] == "text-delta"
+        and parsed.index(p) > parsed.index(text_starts[1])
+    )
+    assert draft_2_deltas == "corrected $93,736M"
+
+    finish = parsed[-1]
+    assert finish["messageMetadata"]["verify"] == {"ok": True, "ungrounded": [], "attempt": 2}
+
+
+@pytest.mark.asyncio
+async def test_stream_veto_final_failure_streams_refusal_as_a_third_draft():
+    envelope_1 = json.dumps({"reasoning": "r", "answer": "fabricated $999,999M", "citations": []})
+    envelope_2 = json.dumps({"reasoning": "r", "answer": "still fabricated $888,888M", "citations": []})
+    scripted = [
+        *_chat_model_stream_events(envelope_1),
+        _synthesize_end_event("fabricated $999,999M"),
+        _verify_event(False, ["999,999"], 1),
+        *_chat_model_stream_events(envelope_2),
+        _synthesize_end_event("still fabricated $888,888M"),
+        _verify_event(False, ["888,888"], 2),
+        {
+            "event": "on_chain_end",
+            "name": "refuse",
+            "tags": [],
+            "data": {"output": {"final_answer": "I couldn't verify all the numbers."}},
+        },
+    ]
+
+    parsed = _types_of(await _collect(scripted))
+    text_starts = [p for p in parsed if p["type"] == "text-start"]
+    assert [p["id"] for p in text_starts] == ["draft-1", "draft-2", "draft-3"]
+
+    last_text = next(p for p in reversed(parsed) if p["type"] == "text-delta")
+    assert last_text["delta"] == "I couldn't verify all the numbers."
+
+    verify_parts = [p for p in parsed if p["type"] == "data-verify"]
+    assert [p["data"]["ok"] for p in verify_parts] == [False, False]
+
+
 def test_sse_helper_keeps_non_ascii_readable():
     line = sse({"type": "text-delta", "delta": "กำไรสุทธิ"})
     assert "กำไรสุทธิ" in line

@@ -119,14 +119,24 @@ def build_synthesize_node(synth_llm: SynthesisLLM):
         if not _has_evidence(state):
             return {"envelope": None, "final_answer": _NO_EVIDENCE_ANSWER}
 
+        human_message = (
+            f"Question: {state['question']}\n\n"
+            f"Evidence:\n{_format_evidence(state)}\n\n"
+            "Reminder: write `answer` in the same language as the Question above."
+        )
+        prior_verify = state.get("verify")
+        if prior_verify and not prior_verify.get("ok"):
+            ungrounded = ", ".join(prior_verify.get("ungrounded", []))
+            human_message += (
+                f"\n\nYour previous answer included numbers that could not be verified "
+                f"against the evidence above: {ungrounded}. Regenerate the answer using "
+                "ONLY numbers that appear in the evidence -- drop or rephrase any claim "
+                "you cannot support instead of repeating an unverifiable figure."
+            )
+
         messages: list[tuple[str, str]] = [
             ("system", SYNTHESIS_SYSTEM_PROMPT),
-            (
-                "human",
-                f"Question: {state['question']}\n\n"
-                f"Evidence:\n{_format_evidence(state)}\n\n"
-                "Reminder: write `answer` in the same language as the Question above.",
-            ),
+            ("human", human_message),
         ]
         envelope = _invoke_with_reask(synth_llm, messages, config)
 

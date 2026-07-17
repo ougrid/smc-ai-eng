@@ -1,7 +1,10 @@
-"""refuse: deterministic bilingual template, no LLM call. Two template
+"""refuse: deterministic bilingual template, no LLM call. Three template
 families, distinguished by `state["refusal_reason"]`: out-of-scope (the
-intent gate caught an off-topic question) and data-unavailable (the
-coverage gate couldn't resolve a company, year range, or 10-K).
+intent gate caught an off-topic question), data-unavailable (the coverage
+gate couldn't resolve a company, year range, or 10-K), and
+unverified-numbers (the Day-4 `verify` node's numeric-consistency guard
+failed twice -- the draft answer is discarded, never annotated, per
+docs/technical-execution-plan.md E6).
 """
 
 from app.agent.state import AgentState
@@ -27,6 +30,18 @@ _DATA_UNAVAILABLE = {
     "th": "ฉันไม่มีข้อมูลเพียงพอที่จะตอบคำถามนี้",
 }
 
+_UNVERIFIED_NUMBERS = {
+    "en": (
+        "I found a draft answer, but couldn't verify all the numbers in it "
+        "against the retrieved data, so I can't give you a fully grounded "
+        "response to this question."
+    ),
+    "th": (
+        "ฉันพบคำตอบร่างไว้แล้ว แต่ไม่สามารถยืนยันตัวเลขทั้งหมดในคำตอบกับข้อมูลที่ดึงมาได้ "
+        "จึงไม่สามารถให้คำตอบที่มีข้อมูลรองรับครบถ้วนสำหรับคำถามนี้ได้"
+    ),
+}
+
 
 def _language_of(state: AgentState) -> str:
     route = state.get("route") or {}
@@ -36,8 +51,11 @@ def _language_of(state: AgentState) -> str:
 
 def refuse_node(state: AgentState) -> dict:
     language = _language_of(state)
-    if state.get("refusal_reason") == "out_of_scope":
+    reason = state.get("refusal_reason")
+    if reason == "out_of_scope":
         answer = _OUT_OF_SCOPE[language]
+    elif reason == "unverified_numbers":
+        answer = _UNVERIFIED_NUMBERS[language]
     else:
         notes = state.get("coverage_notes") or []
         answer = _DATA_UNAVAILABLE[language]

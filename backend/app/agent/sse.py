@@ -7,9 +7,12 @@ tests drive it with a scripted fake event list instead of a live graph
 (see tests/test_sse.py); `run_graph_events` is the thin real-world adapter
 that calls `graph.astream_events(...)`.
 
-Day-3 scope: no `verify` node yet, so there is exactly one text part per
-answer. Day 4 adds the stream-veto sequence (a second `draft-2` text part
-on a failed verify, reconciling the same `data-verify` id).
+Stream-veto: `verify` runs after every `synthesize` attempt. `data-verify`
+always reconciles the same id ("verify-1") across attempts. On a failed
+verify, the NEXT text part (a retry's redraft, or the final refusal text)
+gets a fresh id (`draft-2`, `draft-3`, ...) -- the frontend rule is "render
+only the last text part", so the client never needs to know which attempt
+succeeded, only which one is last.
 """
 
 import json
@@ -114,7 +117,8 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
     yield sse({"type": "start-step"})
 
     extractor = AnswerFieldExtractor()
-    text_id = "draft-1"
+    draft_index = 1
+    text_id = f"draft-{draft_index}"
     text_open = False
     final_state: dict[str, Any] = {}
 
@@ -196,7 +200,21 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
             yield sse({"type": "text-end", "id": text_id})
             text_open = False
 
+        elif name == "verify":
+            verify = output.get("verify") or {}
+            yield sse({"type": "data-verify", "id": "verify-1", "data": verify})
+            if not verify.get("ok", True):
+                # Whatever text part comes next -- a redrafted retry, or the
+                # final refusal template -- is a fresh part; the extractor
+                # is per-synthesize-call state and must not carry over.
+                draft_index += 1
+                text_id = f"draft-{draft_index}"
+                extractor = AnswerFieldExtractor()
+
     yield sse({"type": "finish-step"})
+    debug = dict(final_state.get("debug", {}))
+    if "verify" in final_state:
+        debug["verify"] = final_state["verify"]
     yield sse(
         {
             "type": "finish",
@@ -204,7 +222,8 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
                 "route": final_state.get("effective_route"),
                 "coverage_notes": final_state.get("coverage_notes", []),
                 "citations": final_state.get("chunks", []) + final_state.get("sql_rows", []),
-                "debug": final_state.get("debug", {}),
+                "verify": final_state.get("verify"),
+                "debug": debug,
             },
         }
     )
