@@ -16,7 +16,28 @@ def test_queries_only_vector_eligible_companies():
     tool = _StubVectorTool(VectorResult())
     node = build_vector_retrieve_node(tool)
     node({"question": "why did Meta grow?", "vector_companies": ["Meta"]}, {})
-    assert tool.calls == [("why did Meta grow?", ["Meta"])]
+    assert len(tool.calls) == 1
+    query, companies = tool.calls[0]
+    assert companies == ["Meta"]
+    assert query.startswith("why did Meta grow?")
+
+
+def test_reformulates_query_with_english_narrative_hint():
+    tool = _StubVectorTool(VectorResult())
+    node = build_vector_retrieve_node(tool)
+    node({"question": "ทำไมรายได้ถึงโต", "vector_companies": ["Meta"], "metrics": ["revenue"]}, {})
+    query, _ = tool.calls[0]
+    assert "ทำไมรายได้ถึงโต" in query
+    assert "revenue" in query
+    assert "business strategy" in query
+
+
+def test_reformulates_with_generic_hint_when_no_metrics():
+    tool = _StubVectorTool(VectorResult())
+    node = build_vector_retrieve_node(tool)
+    node({"question": "compare strategy", "vector_companies": ["Meta"]}, {})
+    query, _ = tool.calls[0]
+    assert "business strategy" in query
 
 
 def test_serializes_chunks_and_rejected_into_plain_dicts():
@@ -29,4 +50,6 @@ def test_serializes_chunks_and_rejected_into_plain_dicts():
     assert out["chunks"] == [
         {"id": "c1", "company": "Meta", "source": "Meta_10K.pdf", "page": 5, "text": "...", "score": 0.8}
     ]
-    assert out["rejected_chunks"] == [{"id": "c2", "company": "Meta", "score": 0.1}]
+    assert out["rejected_chunks"] == [
+        {"id": "c2", "company": "Meta", "score": 0.1, "reason": "below_floor"}
+    ]

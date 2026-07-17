@@ -65,3 +65,28 @@ def test_below_floor_chunks_are_rejected_not_dropped_silently():
     assert result.rejected[0].id == "c2"
     assert result.rejected[0].company == "Apple"
     assert result.rejected[0].score == 0.1
+    assert result.rejected[0].reason == "below_floor"
+
+
+def test_print_to_pdf_header_noise_is_rejected_as_boilerplate_even_above_floor():
+    noisy_text = "4/20/26, 12:05 PM goog-20251231 file:///Users/x/Downloads/goog-20251231.htm"
+    index = _StubIndex({"Apple": [_match("c3", 0.6, text=noisy_text)]})
+    result = VectorTool(index, _StubEmbedder(), score_floor=0.25).query("why", ["Apple"])
+    assert result.chunks == []
+    assert len(result.rejected) == 1
+    assert result.rejected[0].id == "c3"
+    assert result.rejected[0].score == 0.6
+    assert result.rejected[0].reason == "boilerplate"
+
+
+def test_substantive_text_with_incidental_header_line_is_kept():
+    text = (
+        "4/20/26, 12:05 PM goog-20251231 file:///Users/x/goog.htm\n"
+        "Our revenue grew due to strength in Search and Cloud, driven by "
+        "increased advertiser demand and enterprise adoption of AI products."
+    )
+    index = _StubIndex({"Apple": [_match("c4", 0.6, text=text)]})
+    result = VectorTool(index, _StubEmbedder(), score_floor=0.25).query("why", ["Apple"])
+    assert len(result.chunks) == 1
+    assert result.chunks[0].id == "c4"
+    assert result.rejected == []

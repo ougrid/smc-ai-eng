@@ -3,14 +3,29 @@ company -- never a single global top-k. Per-company chunk counts are
 heavily skewed (Meta 1568 vs Apple 604, see docs/implementation-plan.md
 verified data facts), so a global top-k would starve the smaller filings.
 
-Chunks scoring below `score_floor` are dropped from `chunks` but still
-recorded in `rejected`, which flows straight into the `debug` payload --
-this is what turns Day-3 score-floor tuning into reading a JSON field
-instead of re-running queries by hand.
+Chunks scoring below `score_floor`, or dominated by print-to-PDF header
+noise (page-header lines like "4/20/26, 12:05 PM goog-20251231
+file:///...", see docs/implementation-plan.md verified data facts), are
+dropped from `chunks` but still recorded in `rejected` with a `reason`,
+which flows straight into the `debug` payload -- this is what turns
+score-floor/boilerplate tuning into reading a JSON field instead of
+re-running queries by hand.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+_HEADER_NOISE = re.compile(
+    r"\d{1,2}/\d{1,2}/\d{2,4},?\s*\d{1,2}:\d{2}\s*[AP]M.*?file:///", re.IGNORECASE
+)
+_MIN_SUBSTANTIVE_CHARS = 40  # below this, after stripping header noise, there's nothing left to cite
+
+
+def _is_boilerplate(text: str) -> bool:
+    if not _HEADER_NOISE.search(text):
+        return False  # short-but-real text (no header noise present) is not our concern here
+    return len(_HEADER_NOISE.sub("", text).strip()) < _MIN_SUBSTANTIVE_CHARS
 
 
 class Embedder(Protocol):
@@ -32,6 +47,7 @@ class RejectedChunk:
     id: str
     company: str
     score: float
+    reason: str = "below_floor"  # "below_floor" | "boilerplate"
 
 
 @dataclass
@@ -83,9 +99,17 @@ class VectorTool:
                 match_id = _field(match, "id")
                 score = _field(match, "score", 0.0)
                 if score < self._score_floor:
-                    rejected.append(RejectedChunk(id=match_id, company=company, score=score))
+                    rejected.append(
+                        RejectedChunk(id=match_id, company=company, score=score, reason="below_floor")
+                    )
                     continue
                 metadata = _field(match, "metadata", {}) or {}
+                text = metadata.get("text", "")
+                if _is_boilerplate(text):
+                    rejected.append(
+                        RejectedChunk(id=match_id, company=company, score=score, reason="boilerplate")
+                    )
+                    continue
                 chunks.append(
                     Chunk(
                         id=match_id,

@@ -38,9 +38,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-change-me"
     jwt_expiry_min: int = 60
 
-    # --- Agent tuning knobs (Day-3 tuning is env-only) ---
+    # --- Agent tuning knobs (env-only) ---
     score_floor: float = 0.25
-    top_k: int = 6
+    top_k: int = 10  # bumped from 6 on Day 4: more headroom for boilerplate rejects to still leave real matches
     sql_row_limit: int = 100
 
     # --- Web ---

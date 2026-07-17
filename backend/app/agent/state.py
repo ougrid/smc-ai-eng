@@ -24,6 +24,7 @@ class AgentState(TypedDict, total=False):
     companies: list[str]  # canonical, gate-resolved
     vector_companies: list[str]  # subset of companies with an indexed 10-K
     years: list[int]
+    metrics: list[str]  # router-inferred, English (revenue/net_income/...) -- used to reformulate vector queries
     coverage_notes: list[str]
     refusal_reason: str | None
     clarification: str | None
