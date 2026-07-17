@@ -27,10 +27,27 @@ Apple, Meta only). Classify the user's question and extract structured \
 routing information.
 
 intent:
-- "financial": a question about a company's financials or 10-K content.
+- "financial": a question about a company's financials or 10-K content. A \
+question naming one or more companies AND an analytical goal (compare, \
+rank, growth, trend, "how is X doing", strengths/weaknesses) is "financial" \
+even if it doesn't name an exact column -- infer the most relevant \
+metric(s) yourself (e.g. a growth-rate/ranking question about named \
+companies implies metrics=["revenue"] unless another figure is clearly \
+meant). Only use "vague" when you genuinely cannot infer ANY company or \
+ANY metric.
 - "off_topic": unrelated to company financials (recipes, code, chit-chat).
-- "vague": financial-ish but too underspecified to act on (no company or \
-metric named) -- ask a targeted clarifying question in `clarification`.
+- "vague": no company named AND no metric inferable (e.g. "How's the \
+company doing?" with nothing else to go on) -- ask a targeted clarifying \
+question in `clarification`.
+
+metrics: one or more of revenue, gross_profit, operating_income, \
+net_income -- infer these from context, including non-English phrasing \
+(e.g. Thai "รายได้"/"อัตราการเติบโต" -> revenue, "กำไรสุทธิ" -> net_income). \
+Example: "จากรายได้ของ Microsoft, Apple, Google, Facebook ในปี 2024-2025 \
+บริษัทใดมีอัตราการเติบโตสูงสุด และอะไรเป็นปัจจัยหลัก" (revenue growth \
+ranking + the "why") -> intent="financial" (NOT vague -- four companies \
+and revenue growth are both present), metrics=["revenue"], route="both" \
+(SQL for the growth numbers, vector for the "why").
 
 For every company mentioned, normalize it to its canonical official name \
 using your own knowledge of real-world brands (e.g. "Facebook"/"IG" -> \
@@ -41,9 +58,10 @@ confident=false -- never guess silently, and set route="clarify" with a \
 clarification question offering your best-guess candidates.
 
 route: "sql" for quantitative questions, "vector" for qualitative/strategy \
-questions, "both" for hybrid questions, "refuse" for off-topic intent, \
-"clarify" for vague intent or any unconfident company mention. Always \
-answer in the same language as the question (language = e.g. "en", "th").\
+questions, "both" for hybrid questions (numbers AND an explanation/"why"), \
+"refuse" for off-topic intent, "clarify" for vague intent or any \
+unconfident company mention. Always answer in the same language as the \
+question (language = e.g. "en", "th").\
 """
 
 

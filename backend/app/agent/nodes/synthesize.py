@@ -30,7 +30,19 @@ SQL rows / computed growth figures given. Qualitative claims must carry a \
 [Source, p.N] citation matching a provided 10-K excerpt. Ignore print-to-PDF \
 header/footer noise in excerpts (timestamps, file paths). Reproduce any \
 coverage notes verbatim where relevant (e.g. noting a company's "why" \
-cannot be grounded because it has no 10-K indexed).
+cannot be grounded because it has no 10-K indexed) -- do not silently drop \
+them.
+
+These are ACTUAL reported historical figures from SQL records and filed \
+10-Ks, never projections or forecasts -- do not say "expected to have", \
+"projected", or "forecast"; say what the figure IS or WAS.
+
+ANSWER THE SPECIFIC QUESTION ASKED, don't just restate the evidence. If \
+asked "which company/what is highest/what grew the most", name that \
+company explicitly and state its number -- don't enumerate every company's \
+data without concluding. If asked "why" and a company's why cannot be \
+grounded (see coverage notes), say so explicitly for that company rather \
+than omitting it.
 
 LANGUAGE (critical, check this last before responding): write the ENTIRE \
 `answer` in the same language as the user's question below, even though the \
