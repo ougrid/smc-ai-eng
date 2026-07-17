@@ -4,8 +4,7 @@ role) is deliberately unable to read; see scripts/initdb/02_roles.sql."""
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -14,8 +13,10 @@ from app.db import Base
 class User(Base):
     __tablename__ = "users"
 
+    # Uuid (not the Postgres-specific dialect type) so this table can also be
+    # created against SQLite in tests -- native UUID on Postgres, CHAR(32) elsewhere.
     id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
