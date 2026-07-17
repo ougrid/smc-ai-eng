@@ -3,13 +3,21 @@ company -- never a single global top-k. Per-company chunk counts are
 heavily skewed (Meta 1568 vs Apple 604, see docs/implementation-plan.md
 verified data facts), so a global top-k would starve the smaller filings.
 
-Chunks scoring below `score_floor`, or dominated by print-to-PDF header
-noise (page-header lines like "4/20/26, 12:05 PM goog-20251231
-file:///...", see docs/implementation-plan.md verified data facts), are
-dropped from `chunks` but still recorded in `rejected` with a `reason`,
-which flows straight into the `debug` payload -- this is what turns
-score-floor/boilerplate tuning into reading a JSON field instead of
-re-running queries by hand.
+Chunks scoring below `score_floor`, dominated by print-to-PDF header noise
+(page-header lines like "4/20/26, 12:05 PM goog-20251231 file:///...", see
+docs/implementation-plan.md verified data facts), or duplicating another
+kept chunk's exact text, are dropped from `chunks` but still recorded in
+`rejected` with a `reason`, which flows straight into the `debug` payload --
+this is what turns score-floor/boilerplate tuning into reading a JSON field
+instead of re-running queries by hand.
+
+Duplicate detection exists because the *provided* source file
+(data/pinecone_vectors.jsonl.gz, loaded as-is per CLAUDE.md -- never
+regenerated or re-embedded) turns out to contain each chunk of real content
+roughly twice, under different ids. Pinecone itself has no dedup, so both
+copies can surface in a query's top-k; this module dedupes by (company,
+text) at read time instead, keeping the highest-scoring copy -- the index
+still holds and reports all 4072 loaded vectors unchanged.
 """
 
 import re
@@ -47,7 +55,7 @@ class RejectedChunk:
     id: str
     company: str
     score: float
-    reason: str = "below_floor"  # "below_floor" | "boilerplate"
+    reason: str = "below_floor"  # "below_floor" | "boilerplate" | "duplicate"
 
 
 @dataclass
@@ -64,6 +72,23 @@ def _field(match: Any, name: str, default: Any = None) -> Any:
     if isinstance(match, dict):
         return match.get(name, default)
     return getattr(match, name, default)
+
+
+def _dedupe(chunks: list[Chunk]) -> tuple[list[Chunk], list[RejectedChunk]]:
+    best: dict[tuple[str, str], Chunk] = {}
+    for chunk in chunks:
+        key = (chunk.company, chunk.text)
+        if key not in best or chunk.score > best[key].score:
+            best[key] = chunk
+
+    kept_ids = {c.id for c in best.values()}
+    kept = [c for c in chunks if c.id in kept_ids]
+    dropped = [
+        RejectedChunk(id=c.id, company=c.company, score=c.score, reason="duplicate")
+        for c in chunks
+        if c.id not in kept_ids
+    ]
+    return kept, dropped
 
 
 class VectorTool:
@@ -120,5 +145,8 @@ class VectorTool:
                         score=score,
                     )
                 )
+
+        chunks, duplicates = _dedupe(chunks)
+        rejected.extend(duplicates)
 
         return VectorResult(chunks=chunks, rejected=rejected)

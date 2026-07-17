@@ -79,6 +79,40 @@ def test_print_to_pdf_header_noise_is_rejected_as_boilerplate_even_above_floor()
     assert result.rejected[0].reason == "boilerplate"
 
 
+def test_duplicate_text_within_a_company_keeps_only_the_highest_scoring_copy():
+    text = "Our revenue grew due to strength in Search and Cloud advertising demand."
+    index = _StubIndex(
+        {"Apple": [_match("dup-lo", 0.5, text=text), _match("dup-hi", 0.7, text=text)]}
+    )
+    result = VectorTool(index, _StubEmbedder(), score_floor=0.25).query("why", ["Apple"])
+    assert len(result.chunks) == 1
+    assert result.chunks[0].id == "dup-hi"
+    assert result.chunks[0].score == 0.7
+    assert len(result.rejected) == 1
+    assert result.rejected[0].id == "dup-lo"
+    assert result.rejected[0].reason == "duplicate"
+
+
+def test_duplicate_text_across_different_companies_is_not_deduped():
+    text = "Identical boilerplate legal text that happens to appear in both filings."
+    index = _StubIndex(
+        {"Apple": [_match("a1", 0.6, text=text)], "Meta": [_match("m1", 0.6, text=text)]}
+    )
+    result = VectorTool(index, _StubEmbedder(), score_floor=0.25).query("why", ["Apple", "Meta"])
+    assert len(result.chunks) == 2
+    assert result.rejected == []
+
+
+def test_equal_score_duplicates_keep_the_first_seen_copy():
+    text = "Some substantive strategy narrative here about revenue drivers."
+    index = _StubIndex(
+        {"Apple": [_match("first", 0.5, text=text), _match("second", 0.5, text=text)]}
+    )
+    result = VectorTool(index, _StubEmbedder(), score_floor=0.25).query("why", ["Apple"])
+    assert len(result.chunks) == 1
+    assert result.chunks[0].id == "first"
+
+
 def test_substantive_text_with_incidental_header_line_is_kept():
     text = (
         "4/20/26, 12:05 PM goog-20251231 file:///Users/x/goog.htm\n"
