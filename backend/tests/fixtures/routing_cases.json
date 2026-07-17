@@ -1,0 +1,368 @@
+[
+  {
+    "id": "facebook_google_en",
+    "question": "Compare Facebook and Google revenue in 2025",
+    "route_decision": {
+      "reasoning": "financial comparison of two companies for one year",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "Facebook", "canonical": "Meta", "confident": true},
+        {"mentioned": "Google", "canonical": "Google", "confident": true}
+      ],
+      "years": [2025],
+      "metrics": ["revenue"],
+      "route": "both",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "both",
+      "companies": ["Meta", "Google"],
+      "vector_companies": ["Meta", "Google"],
+      "years": [2025],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "facebook_google_th",
+    "question": "เปรียบเทียบเฟซบุ๊กกับกูเกิลปี 2025",
+    "route_decision": {
+      "reasoning": "Thai comparison question",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "เฟซบุ๊ก", "canonical": "Meta", "confident": true},
+        {"mentioned": "กูเกิล", "canonical": "Google", "confident": true}
+      ],
+      "years": [2025],
+      "metrics": ["revenue"],
+      "route": "both",
+      "clarification": null,
+      "language": "th"
+    },
+    "expected": {
+      "effective_route": "both",
+      "companies": ["Meta", "Google"],
+      "vector_companies": ["Meta", "Google"],
+      "years": [2025],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "alphabet_alias_backstop",
+    "question": "What was Alphabet's net income in 2024?",
+    "route_decision": {
+      "reasoning": "LLM output the 10-K's own name rather than the SQL name",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "Alphabet", "canonical": "Alphabet", "confident": true}
+      ],
+      "years": [2024],
+      "metrics": ["net_income"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "sql",
+      "companies": ["Google"],
+      "vector_companies": ["Google"],
+      "years": [2024],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "apple_thai_alias",
+    "question": "รายได้ของแอปเปิลปี 2025 เท่าไหร่",
+    "route_decision": {
+      "reasoning": "Thai name for Apple",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "แอปเปิล", "canonical": "Apple", "confident": true}
+      ],
+      "years": [2025],
+      "metrics": ["revenue"],
+      "route": "sql",
+      "clarification": null,
+      "language": "th"
+    },
+    "expected": {
+      "effective_route": "sql",
+      "companies": ["Apple"],
+      "vector_companies": ["Apple"],
+      "years": [2025],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "blackrock_trim_2022_2025",
+    "question": "BlackRock net income 2022 to 2025",
+    "route_decision": {
+      "reasoning": "single company, four years requested",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "BlackRock", "canonical": "BlackRock", "confident": true}
+      ],
+      "years": [2022, 2023, 2024, 2025],
+      "metrics": ["net_income"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "sql",
+      "companies": ["BlackRock"],
+      "vector_companies": [],
+      "years": [2022, 2023],
+      "coverage_notes_contains": ["BlackRock has no data for 2024, 2025"],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "blackrock_refuse_2025_only",
+    "question": "BlackRock net income in 2025",
+    "route_decision": {
+      "reasoning": "single company, single out-of-range year",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "BlackRock", "canonical": "BlackRock", "confident": true}
+      ],
+      "years": [2025],
+      "metrics": ["net_income"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "refuse",
+      "companies": ["BlackRock"],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": ["BlackRock has no data for 2025"],
+      "clarification_expected": false,
+      "refusal_reason": "years_out_of_range"
+    }
+  },
+  {
+    "id": "shopify_refuse_2022_only",
+    "question": "Shopify revenue in 2022",
+    "route_decision": {
+      "reasoning": "single company, single out-of-range year",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "Shopify", "canonical": "Shopify", "confident": true}
+      ],
+      "years": [2022],
+      "metrics": ["revenue"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "refuse",
+      "companies": ["Shopify"],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": ["Shopify has no data for 2022"],
+      "clarification_expected": false,
+      "refusal_reason": "years_out_of_range"
+    }
+  },
+  {
+    "id": "siemens_unknown_company",
+    "question": "What is Siemens' net income?",
+    "route_decision": {
+      "reasoning": "real company, but not in our SQL data",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "Siemens", "canonical": "Siemens", "confident": true}
+      ],
+      "years": [],
+      "metrics": ["net_income"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "refuse",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": ["No data available for: Siemens"],
+      "clarification_expected": false,
+      "refusal_reason": "unknown_company"
+    }
+  },
+  {
+    "id": "microsoft_hybrid_no_10k",
+    "question": "จากรายได้ของ Microsoft, Apple, Google, Facebook ในปี 2024-2025 บริษัทใดมีอัตราการเติบโตสูงสุด และอะไรเป็นปัจจัยหลัก",
+    "route_decision": {
+      "reasoning": "hybrid: SQL for growth numbers, vector for the why",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "Microsoft", "canonical": "Microsoft", "confident": true},
+        {"mentioned": "Apple", "canonical": "Apple", "confident": true},
+        {"mentioned": "Google", "canonical": "Google", "confident": true},
+        {"mentioned": "Facebook", "canonical": "Meta", "confident": true}
+      ],
+      "years": [2024, 2025],
+      "metrics": ["revenue"],
+      "route": "both",
+      "clarification": null,
+      "language": "th"
+    },
+    "expected": {
+      "effective_route": "both",
+      "companies": ["Microsoft", "Apple", "Google", "Meta"],
+      "vector_companies": ["Apple", "Google", "Meta"],
+      "years": [2024, 2025],
+      "coverage_notes_contains": ["Microsoft has no 10-K filing indexed"],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "year_2021_trimmed",
+    "question": "Apple revenue 2021 and 2022",
+    "route_decision": {
+      "reasoning": "one year out of range, one in range",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "Apple", "canonical": "Apple", "confident": true}
+      ],
+      "years": [2021, 2022],
+      "metrics": ["revenue"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "sql",
+      "companies": ["Apple"],
+      "vector_companies": ["Apple"],
+      "years": [2022],
+      "coverage_notes_contains": ["Apple has no data for 2021"],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "off_topic_en",
+    "question": "Write me a poem about the ocean",
+    "route_decision": {
+      "reasoning": "not about company financials or 10-K content",
+      "intent": "off_topic",
+      "companies": [],
+      "years": [],
+      "metrics": [],
+      "route": "refuse",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "refuse",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": [],
+      "clarification_expected": false,
+      "refusal_reason": "out_of_scope"
+    }
+  },
+  {
+    "id": "off_topic_th",
+    "question": "แนะนำร้านอาหารหน่อย",
+    "route_decision": {
+      "reasoning": "restaurant recommendation, not financial",
+      "intent": "off_topic",
+      "companies": [],
+      "years": [],
+      "metrics": [],
+      "route": "refuse",
+      "clarification": null,
+      "language": "th"
+    },
+    "expected": {
+      "effective_route": "refuse",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": [],
+      "clarification_expected": false,
+      "refusal_reason": "out_of_scope"
+    }
+  },
+  {
+    "id": "vague_how_is_it_doing",
+    "question": "How's the company doing?",
+    "route_decision": {
+      "reasoning": "financial-ish but no company or metric named",
+      "intent": "vague",
+      "companies": [],
+      "years": [],
+      "metrics": [],
+      "route": "clarify",
+      "clarification": "Which company do you mean? I have data for Apple, Google, Meta, Microsoft, and about 45 others.",
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "clarify",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": [],
+      "clarification_expected": true,
+      "clarification_contains": "Which company"
+    }
+  },
+  {
+    "id": "fuzzy_resolved_iphone_company",
+    "question": "What was the iPhone company's revenue in 2025?",
+    "route_decision": {
+      "reasoning": "world-knowledge resolution: iPhone maker is Apple",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "the iPhone company", "canonical": "Apple", "confident": true}
+      ],
+      "years": [2025],
+      "metrics": ["revenue"],
+      "route": "sql",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "sql",
+      "companies": ["Apple"],
+      "vector_companies": ["Apple"],
+      "years": [2025],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "ambiguous_mention_clarify",
+    "question": "How's the company's revenue looking?",
+    "route_decision": {
+      "reasoning": "mention too vague to resolve to any single company",
+      "intent": "financial",
+      "companies": [
+        {"mentioned": "the company", "canonical": null, "confident": false}
+      ],
+      "years": [],
+      "metrics": ["revenue"],
+      "route": "clarify",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "clarify",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": [],
+      "clarification_expected": true,
+      "clarification_contains": "the company"
+    }
+  }
+]
