@@ -14,12 +14,37 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, text
 
+from app.agent.coverage import build_coverage
+from app.agent.graph import build_graph
+from app.agent.nodes.route import build_route_llm
+from app.agent.nodes.sql_retrieve import build_sql_llm
+from app.agent.nodes.synthesize import build_synthesis_llm
+from app.agent.sql_tool import SqlTool
+from app.agent.vector_tool import VectorTool
 from app.auth.models import User  # noqa: F401 -- import registers the table with Base.metadata
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
+from app.clients.llm_client import build_embedder, build_llm
 from app.clients.pinecone_client import resolve_index, vector_count
 from app.config import Settings, get_settings
 from app.db import Base, build_agent_ro_engine, build_engine
+
+
+def _build_real_graph(settings: Settings, agent_engine: Engine, pinecone_index: Any):
+    """Wires the real LangGraph agent -- only called when no `graph` stub
+    was injected, so offline tests never construct a live LLM/embedder."""
+    llm = build_llm(settings)
+    embedder = build_embedder(settings)
+    return build_graph(
+        coverage=build_coverage(agent_engine),
+        route_llm=build_route_llm(llm),
+        sql_llm=build_sql_llm(llm),
+        synth_llm=build_synthesis_llm(llm),
+        sql_tool=SqlTool(agent_engine, row_limit=settings.sql_row_limit),
+        vector_tool=VectorTool(
+            pinecone_index, embedder, top_k=settings.top_k, score_floor=settings.score_floor
+        ),
+    )
 
 
 def create_app(
@@ -47,7 +72,9 @@ def create_app(
         app.state.pinecone_index = (
             pinecone_index if pinecone_index is not None else resolve_index(resolved_settings)
         )
-        app.state.graph = graph
+        app.state.graph = graph if graph is not None else _build_real_graph(
+            resolved_settings, app.state.agent_engine, app.state.pinecone_index
+        )
         yield
 
     app = FastAPI(title="smc-ai-eng", lifespan=lifespan)

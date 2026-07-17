@@ -89,6 +89,7 @@ def client():
         engine=engine,
         agent_engine=engine,
         pinecone_index=_StubPineconeIndex(),
+        graph=object(),  # unused by these tests -- placeholder skips real graph construction
     )
     with TestClient(app) as c:
         yield c
