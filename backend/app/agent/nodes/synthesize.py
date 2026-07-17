@@ -30,8 +30,14 @@ SQL rows / computed growth figures given. Qualitative claims must carry a \
 [Source, p.N] citation matching a provided 10-K excerpt. Ignore print-to-PDF \
 header/footer noise in excerpts (timestamps, file paths). Reproduce any \
 coverage notes verbatim where relevant (e.g. noting a company's "why" \
-cannot be grounded because it has no 10-K indexed). Answer in the same \
-language as the question.\
+cannot be grounded because it has no 10-K indexed).
+
+LANGUAGE (critical, check this last before responding): write the ENTIRE \
+`answer` in the same language as the user's question below, even though the \
+evidence (SQL rows, 10-K excerpts) is in English -- translate the substance, \
+don't just copy English sentences. A Thai question gets a Thai answer in \
+Thai script; an English question gets an English answer. Company names, \
+tickers, and dollar figures may stay as-is.\
 """
 
 _NO_EVIDENCE_ANSWER = "I don't have grounded data available to answer this question."
@@ -96,7 +102,12 @@ def build_synthesize_node(synth_llm: SynthesisLLM):
 
         messages: list[tuple[str, str]] = [
             ("system", SYNTHESIS_SYSTEM_PROMPT),
-            ("human", f"Question: {state['question']}\n\nEvidence:\n{_format_evidence(state)}"),
+            (
+                "human",
+                f"Question: {state['question']}\n\n"
+                f"Evidence:\n{_format_evidence(state)}\n\n"
+                "Reminder: write `answer` in the same language as the Question above.",
+            ),
         ]
         envelope = _invoke_with_reask(synth_llm, messages, config)
 
