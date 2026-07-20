@@ -3,7 +3,7 @@ runnable directly (the `RouteLLM` protocol) rather than a real chat model.
 """
 
 from app.agent.coverage import CoverageMap
-from app.agent.nodes.route import build_route_node
+from app.agent.nodes.route import SYSTEM_PROMPT, build_route_node
 from app.agent.schemas import CompanyMention, RouteDecision
 
 COVERAGE = CoverageMap(
@@ -130,3 +130,54 @@ def test_unconfident_mention_routes_to_clarify_with_candidates():
     result = _run(llm)
     assert result["effective_route"] == "clarify"
     assert "the company" in result["clarification"]
+
+
+# --- history-aware resolution (found via live multi-turn testing; see
+# docs/implementation-plan.md v2.6) ---
+
+
+class _CapturingRouteLLM:
+    def __init__(self, decision):
+        self._decision = decision
+        self.calls = 0
+        self.last_messages = None
+
+    def invoke(self, messages, config=None):
+        self.calls += 1
+        self.last_messages = messages
+        return _ok(self._decision)
+
+
+def test_history_is_threaded_before_the_current_question():
+    llm = _CapturingRouteLLM(_parsed())
+    node = build_route_node(COVERAGE, llm)
+    node(
+        {
+            "question": "the revenue",
+            "history": [("user", "suggest metrics for AMZN"), ("assistant", "Revenue or net income?")],
+        },
+        {},
+    )
+    roles_and_texts = llm.last_messages
+    assert roles_and_texts[0][0] == "system"
+    assert roles_and_texts[1] == ("human", "suggest metrics for AMZN")
+    assert roles_and_texts[2] == ("ai", "Revenue or net income?")
+    assert roles_and_texts[-1] == ("human", "the revenue")
+
+
+def test_history_is_capped_to_history_max_messages():
+    llm = _CapturingRouteLLM(_parsed())
+    node = build_route_node(COVERAGE, llm, history_max_messages=2)
+    long_history = [("user", "1"), ("assistant", "2"), ("user", "3"), ("assistant", "4")]
+    node({"question": "q", "history": long_history}, {})
+    # system + last 2 history entries + current question == 4 messages
+    assert len(llm.last_messages) == 4
+    assert llm.last_messages[1] == ("human", "3")
+    assert llm.last_messages[2] == ("ai", "4")
+
+
+def test_no_history_key_behaves_like_before():
+    llm = _CapturingRouteLLM(_parsed())
+    node = build_route_node(COVERAGE, llm)
+    node({"question": "irrelevant"}, {})
+    assert llm.last_messages == [("system", SYSTEM_PROMPT), ("human", "irrelevant")]

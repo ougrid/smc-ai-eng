@@ -113,3 +113,38 @@ def test_persistently_fabricated_number_fails_closed_to_refusal():
     assert result["verify_attempts"] == 2
     assert result["refusal_reason"] == "unverified_numbers"
     assert "couldn't verify" in result["final_answer"] or "verify" in result["final_answer"].lower()
+
+
+# --- history-aware routing: end-to-end through the real build_graph wiring
+# (not just the route node in isolation), see docs/implementation-plan.md v2.6 ---
+
+
+class _CapturingRouteLLM:
+    def __init__(self, decision):
+        self._decision = decision
+        self.last_messages = None
+
+    def invoke(self, messages, config=None):
+        self.last_messages = messages
+        return {"raw": None, "parsed": self._decision, "parsing_error": None}
+
+
+def test_history_reaches_route_node_through_full_graph_wiring():
+    route_llm = _CapturingRouteLLM(_route_decision())
+    graph = build_graph(
+        coverage=COVERAGE,
+        route_llm=route_llm,
+        sql_llm=None,
+        synth_llm=_StubSynthLLM([_envelope("Meta's revenue reached $134.9 billion.")]),
+        sql_tool=None,
+        vector_tool=_StubVectorTool(),
+        history_max_messages=4,
+    )
+    # Simulates turn 2 of a conversation: turn 1 asked about Meta's metrics,
+    # this turn's message alone ("the revenue") is elliptical without it.
+    history = [("user", "suggest metrics for Meta"), ("assistant", "Revenue or net income?")]
+    graph.invoke({"question": "the revenue", "history": history})
+
+    assert route_llm.last_messages[1] == ("human", "suggest metrics for Meta")
+    assert route_llm.last_messages[2] == ("ai", "Revenue or net income?")
+    assert route_llm.last_messages[-1] == ("human", "the revenue")

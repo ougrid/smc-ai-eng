@@ -57,15 +57,18 @@ def build_graph(
     synth_llm: SynthesisLLM,
     sql_tool: SqlTool,
     vector_tool: VectorTool,
+    history_max_messages: int = 8,
 ):
     g = StateGraph(AgentState)
 
-    g.add_node("route", build_route_node(coverage, route_llm))
+    g.add_node("route", build_route_node(coverage, route_llm, history_max_messages=history_max_messages))
     g.add_node("clarify", clarify_node)
     g.add_node("refuse", refuse_node)
     g.add_node("sql_retrieve", build_sql_retrieve_node(sql_llm, sql_tool))
     g.add_node("vector_retrieve", build_vector_retrieve_node(vector_tool))
-    g.add_node("synthesize", build_synthesize_node(synth_llm))
+    g.add_node(
+        "synthesize", build_synthesize_node(synth_llm, history_max_messages=history_max_messages)
+    )
     g.add_node("verify", build_verify_node())
 
     g.set_entry_point("route")

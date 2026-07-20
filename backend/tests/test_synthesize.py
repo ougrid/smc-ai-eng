@@ -121,6 +121,43 @@ def test_language_directive_defaults_to_english_when_route_missing():
     assert 'TARGET LANGUAGE: English ("en")' in human_message
 
 
+def test_history_is_threaded_between_system_prompt_and_question():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="answer"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node(
+        {
+            "question": "give me insights",
+            "sql_rows": [{"company": "Amazon", "year": 2025}],
+            "history": [("user", "AMZN"), ("assistant", "What about it?")],
+        },
+        {},
+    )
+    messages = captured["messages"]
+    assert messages[1] == ("human", "AMZN")
+    assert messages[2] == ("ai", "What about it?")
+    assert messages[3][0] == "human"
+    assert "give me insights" in messages[3][1]
+
+
+def test_absent_history_leaves_message_shape_unchanged():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="answer"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node({"question": "q", "sql_rows": [{"company": "Apple", "year": 2025}]}, {})
+    assert len(captured["messages"]) == 2  # system + human, exactly as before this feature
+
+
 def test_verify_retry_hint_reaches_the_llm_prompt():
     captured = {}
 

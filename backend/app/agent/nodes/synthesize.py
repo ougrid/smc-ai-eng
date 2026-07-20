@@ -13,6 +13,12 @@ Bound the same way as the route node: `with_structured_output(...,
 strict=True, include_raw=True)`, tagged "synthesize" so the SSE emitter can
 filter its token stream to just this node's output; same
 one-re-ask-then-refuse policy on `parsed=None`.
+
+A capped history window (`agent/history.py`) is appended before the
+question, same as the route node, but purely for phrasing continuity --
+by the time this node runs, companies/years/evidence are already resolved
+structurally by `route` + the coverage gate, so history here can't change
+what's grounded, only how naturally the answer reads on a follow-up.
 """
 
 from typing import Any, Protocol
@@ -20,6 +26,7 @@ from typing import Any, Protocol
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 
+from app.agent.history import history_messages
 from app.agent.schemas import SynthesisEnvelope
 from app.agent.state import AgentState
 
@@ -124,7 +131,7 @@ def _invoke_with_reask(
     return result["parsed"]
 
 
-def build_synthesize_node(synth_llm: SynthesisLLM):
+def build_synthesize_node(synth_llm: SynthesisLLM, *, history_max_messages: int = 8):
     def _node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         if not _has_evidence(state):
             return {"envelope": None, "final_answer": _NO_EVIDENCE_ANSWER}
@@ -149,6 +156,7 @@ def build_synthesize_node(synth_llm: SynthesisLLM):
 
         messages: list[tuple[str, str]] = [
             ("system", SYNTHESIS_SYSTEM_PROMPT),
+            *history_messages(state, history_max_messages),
             ("human", human_message),
         ]
         envelope = _invoke_with_reask(synth_llm, messages, config)

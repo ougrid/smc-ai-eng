@@ -44,6 +44,7 @@ def _build_real_graph(settings: Settings, agent_engine: Engine, pinecone_index: 
         vector_tool=VectorTool(
             pinecone_index, embedder, top_k=settings.top_k, score_floor=settings.score_floor
         ),
+        history_max_messages=settings.history_max_messages,
     )
 
 

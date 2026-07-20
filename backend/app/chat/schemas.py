@@ -30,7 +30,14 @@ class ChatRequest(BaseModel):
 
 
 def _text_of(message: UIMessageIn) -> str:
-    return "".join(part.text or "" for part in message.parts if part.type == "text")
+    """The message's answer text -- only the LAST "text"-type part, not a
+    join of all of them. A message that survived a stream-veto retry
+    (agent/sse.py) has more than one text part: the discarded fabricated
+    draft, then its correction, each under a fresh part id. Joining every
+    part would resurface the fabricated draft's text every time this
+    message is later replayed as conversation history."""
+    text_parts = [part.text or "" for part in message.parts if part.type == "text"]
+    return text_parts[-1] if text_parts else ""
 
 
 def latest_user_text(req: ChatRequest) -> str:

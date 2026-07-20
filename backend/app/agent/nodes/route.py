@@ -16,6 +16,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 
 from app.agent.coverage import CoverageMap, apply_gate
+from app.agent.history import history_messages
 from app.agent.schemas import RouteDecision
 from app.agent.state import AgentState
 
@@ -61,7 +62,21 @@ route: "sql" for quantitative questions, "vector" for qualitative/strategy \
 questions, "both" for hybrid questions (numbers AND an explanation/"why"), \
 "refuse" for off-topic intent, "clarify" for vague intent or any \
 unconfident company mention. Always answer in the same language as the \
-question (language = e.g. "en", "th").\
+question (language = e.g. "en", "th").
+
+CONVERSATION HISTORY: you may see prior turns of this conversation before \
+the latest message, oldest first. Use them to resolve references in the \
+latest message that only make sense combined with what was already said: \
+a bare company name or ticker after an earlier turn already named the \
+metric ("AMZN" after "suggest metrics for Amazon" means revenue/whatever \
+was just discussed), an elliptical phrase like "the revenue" or "give me \
+insights" referring back to a company named earlier, or a continuation \
+like "drill down further" on the prior topic. If the latest message is \
+already a complete, self-contained question, ignore the history -- it \
+shouldn't change your answer. If the request is still ambiguous even \
+after considering all of the history (no resolvable company or metric \
+anywhere in it), continue to ask a clarifying question via `clarify` -- \
+never guess just because something was discussed earlier.\
 """
 
 
@@ -100,9 +115,13 @@ def _invoke_with_reask(
     return result["parsed"]  # None on a second failure -> fail-closed
 
 
-def build_route_node(coverage: CoverageMap, route_llm: RouteLLM):
+def build_route_node(coverage: CoverageMap, route_llm: RouteLLM, *, history_max_messages: int = 8):
     def _node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
-        messages = [("system", SYSTEM_PROMPT), ("human", state["question"])]
+        messages = [
+            ("system", SYSTEM_PROMPT),
+            *history_messages(state, history_max_messages),
+            ("human", state["question"]),
+        ]
         decision = _invoke_with_reask(route_llm, messages, config)
 
         if decision is None:
