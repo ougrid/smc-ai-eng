@@ -216,8 +216,30 @@ touch:
 | `EMBED_DIMENSIONS` | Must stay `512` — the provided vectors were embedded at this dimension; changing it breaks retrieval. |
 | `DATABASE_URL` / `AGENT_RO_DATABASE_URL` | App-role vs. read-only-role Postgres connections — the agent's SQL tool only ever uses the latter. |
 | `SCORE_FLOOR` / `TOP_K` | Vector retrieval tuning — chunks scoring below the floor are rejected (visible in the `debug` payload's `rejected_chunks`). |
+| `HISTORY_MAX_MESSAGES` | How many trailing conversation messages (default 8, ≈4 exchanges) the router/synthesizer see verbatim — see "Multi-turn context" below. |
 | `JWT_SECRET` | Change this for anything beyond local dev. |
 | `CORS_ORIGINS` | Frontend origins allowed to call the API. |
+
+## Multi-turn context
+
+The router and synthesizer see the trailing `HISTORY_MAX_MESSAGES` messages of
+the conversation (default 8, verbatim — no summarization), so follow-ups like
+"suggest metrics for AMZN" → "Revenue. Give me insights" → "the revenue"
+resolve against what was already said instead of re-asking for the company
+every turn. If a request is still ambiguous even considering that history, the
+router still asks a clarifying question rather than guessing — the fix widens
+what counts as "enough information," it doesn't remove the no-hallucination
+guard. `sql_retrieve`/`vector_retrieve` don't need history directly; by the
+time they run, the router has already resolved company/year/metric into
+`AgentState`.
+
+This is intentionally a small, fixed window, not the sliding-window +
+LLM-summarization pipeline you'll see in longer-running agents — see
+`docs/implementation-plan.md`'s Future-improvements entry on hierarchical
+summarization for why that's deferred (a financial Q&A session is a handful
+of exchanges, and an extra per-turn summarization call is itself a
+hallucination surface). It also doesn't survive a page reload — see the next
+point.
 
 ## Known trade-offs and data quirks
 
@@ -227,8 +249,10 @@ touch:
   `docs/implementation-plan.md` §5) — deliberately kept simple since auth will be
   extended live in a follow-up session.
 - **No persisted chat history** — conversations live only in the browser tab's
-  `useChat` state. See `docs/implementation-plan.md` §4 for the planned
-  `messages` table and resumable-streams design.
+  `useChat` state (this is also what the agent's history-aware routing reads —
+  see "Multi-turn context" above — so a page reload loses both the visible
+  transcript and the context the router uses). See `docs/implementation-plan.md`
+  §4 for the planned `messages` table and resumable-streams design.
 - **Duplicate vector chunks in the provided dataset**: `data/pinecone_vectors.jsonl.gz`
   (loaded as-is, never regenerated) contains roughly half its 4072 records as
   near-duplicates of another record's text under a different id. The vector store
