@@ -212,9 +212,19 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
                 extractor = AnswerFieldExtractor()
 
     yield sse({"type": "finish-step"})
+    # Everything below is already in state for free -- per docs/technical-
+    # execution-plan.md E7, `debug` also carries the emitted SQL, computed
+    # growth figures, and rejected vector chunks (incl. below-floor/
+    # boilerplate/duplicate scores), not just the route node's own debug.
     debug = dict(final_state.get("debug", {}))
     if "verify" in final_state:
         debug["verify"] = final_state["verify"]
+    if "sql" in final_state:
+        debug["sql"] = final_state["sql"]
+    if "computed" in final_state:
+        debug["computed"] = final_state["computed"]
+    if "rejected_chunks" in final_state:
+        debug["rejected_chunks"] = final_state["rejected_chunks"]
     yield sse(
         {
             "type": "finish",
