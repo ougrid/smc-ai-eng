@@ -22,7 +22,7 @@ from app.agent.nodes.vector_retrieve import build_vector_retrieve_node
 from app.agent.nodes.verify import build_verify_node
 from app.agent.sql_tool import SqlTool
 from app.agent.state import AgentState
-from app.agent.vector_tool import VectorTool
+from app.agent.vector_tool import VectorQueryable
 
 MAX_VERIFY_ATTEMPTS = 2
 
@@ -56,7 +56,7 @@ def build_graph(
     sql_llm: SqlLLM,
     synth_llm: SynthesisLLM,
     sql_tool: SqlTool,
-    vector_tool: VectorTool,
+    vector_tool: VectorQueryable,
     history_max_messages: int = 8,
 ):
     g = StateGraph(AgentState)

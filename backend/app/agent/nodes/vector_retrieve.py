@@ -19,7 +19,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from app.agent.state import AgentState
-from app.agent.vector_tool import VectorTool
+from app.agent.vector_tool import VectorQueryable
 
 _NARRATIVE_HINT = "business strategy, revenue structure, growth drivers, competitive strengths"
 
@@ -31,7 +31,7 @@ def _reformulate(question: str, metrics: list[str]) -> str:
     return f"{question}\n\nRelevant context: {metric_labels}, {_NARRATIVE_HINT}."
 
 
-def build_vector_retrieve_node(vector_tool: VectorTool):
+def build_vector_retrieve_node(vector_tool: VectorQueryable):
     def _node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         query = _reformulate(state["question"], state.get("metrics", []))
         result = vector_tool.query(query, state.get("vector_companies", []))

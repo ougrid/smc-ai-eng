@@ -30,7 +30,10 @@ _HEADER_NOISE = re.compile(
 _MIN_SUBSTANTIVE_CHARS = 40  # below this, after stripping header noise, there's nothing left to cite
 
 
-def _is_boilerplate(text: str) -> bool:
+def is_boilerplate(text: str) -> bool:
+    """Public (not `_`-prefixed): also used by agent/hybrid_tool.py to
+    filter text-search-only candidates, which never pass through
+    VectorTool.query's own boilerplate check."""
     if not _HEADER_NOISE.search(text):
         return False  # short-but-real text (no header noise present) is not our concern here
     return len(_HEADER_NOISE.sub("", text).strip()) < _MIN_SUBSTANTIVE_CHARS
@@ -55,13 +58,22 @@ class RejectedChunk:
     id: str
     company: str
     score: float
-    reason: str = "below_floor"  # "below_floor" | "boilerplate" | "duplicate"
+    reason: str = "below_floor"  # "below_floor" | "boilerplate" | "duplicate" | "fusion_cut"
 
 
 @dataclass
 class VectorResult:
     chunks: list[Chunk] = field(default_factory=list)
     rejected: list[RejectedChunk] = field(default_factory=list)
+
+
+class VectorQueryable(Protocol):
+    """Structural interface `nodes/vector_retrieve.py` and `graph.py` depend
+    on -- satisfied by both `VectorTool` (dense-only) and
+    `agent/hybrid_tool.py`'s `HybridTool` (dense+lexical fused), so the node
+    never needs to know which one it was handed."""
+
+    def query(self, question: str, companies: list[str]) -> VectorResult: ...
 
 
 def _matches_of(response: Any) -> list[Any]:
@@ -74,7 +86,7 @@ def _field(match: Any, name: str, default: Any = None) -> Any:
     return getattr(match, name, default)
 
 
-def _dedupe(chunks: list[Chunk]) -> tuple[list[Chunk], list[RejectedChunk]]:
+def dedupe_chunks(chunks: list[Chunk]) -> tuple[list[Chunk], list[RejectedChunk]]:
     best: dict[tuple[str, str], Chunk] = {}
     for chunk in chunks:
         key = (chunk.company, chunk.text)
@@ -130,7 +142,7 @@ class VectorTool:
                     continue
                 metadata = _field(match, "metadata", {}) or {}
                 text = metadata.get("text", "")
-                if _is_boilerplate(text):
+                if is_boilerplate(text):
                     rejected.append(
                         RejectedChunk(id=match_id, company=company, score=score, reason="boilerplate")
                     )
@@ -146,7 +158,7 @@ class VectorTool:
                     )
                 )
 
-        chunks, duplicates = _dedupe(chunks)
+        chunks, duplicates = dedupe_chunks(chunks)
         rejected.extend(duplicates)
 
         return VectorResult(chunks=chunks, rejected=rejected)
