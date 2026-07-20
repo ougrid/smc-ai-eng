@@ -5,6 +5,7 @@ up:
 
 seed:
 	uv run --project backend python scripts/load_pinecone.py
+	uv run --project backend python scripts/load_chunk_text.py
 
 api:
 	cd backend && uv run uvicorn app.main:app --reload --port 8000
