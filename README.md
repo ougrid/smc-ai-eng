@@ -54,6 +54,8 @@ flowchart LR
   per-company chunk counts are heavily skewed). Rejects chunks below a score floor,
   print-to-PDF header-noise chunks, and near-duplicate chunks (the provided dataset
   contains most real chunks twice under different ids — see "Known data quirks" below).
+  The dense Pinecone ranking is fused with a lexical Postgres full-text ranking via
+  reciprocal rank fusion before these filters run — see "Hybrid retrieval" below.
 - **synthesize**: strict evidence-only contract (structured output) — quantitative
   claims only from SQL/computed figures, qualitative claims cited `[Source, p.N]`,
   coverage gaps stated explicitly in the answer text, answer language set explicitly
@@ -110,28 +112,40 @@ This starts three containers:
 | `adminer` | `smc-adminer` | 8080 | optional DB browser UI — `http://localhost:8080`, server `postgres`, user `app`, password `app_local_dev`, database `findata` |
 
 Postgres seeds itself automatically on first volume creation (`data/financial_data.sql`
-+ `scripts/initdb/02_roles.sql` mount into `/docker-entrypoint-initdb.d/`). **Pinecone
-does not** — see the caveat below.
++ `scripts/initdb/02_chunk_text.sql` + `scripts/initdb/03_roles.sql` mount into
+`/docker-entrypoint-initdb.d/`). **Pinecone does not** — see the caveat below.
 
-### 3. Seed the vector store
+> **Upgrading an existing clone**: if your Postgres volume was created before hybrid
+> retrieval was added, it won't have the `chunk_text` table (initdb only runs on a
+> *fresh* volume). Run `docker compose down -v && docker compose up -d` once to pick
+> it up — the app still works without it (retrieval degrades to dense-only) but full
+> hybrid retrieval needs the fresh volume + the loader in step 3 below.
+
+### 3. Seed the vector store and full-text index
 
 ```bash
 uv run --project backend python scripts/load_pinecone.py
+uv run --project backend python scripts/load_chunk_text.py
 # or: make seed
 ```
 
-Loads `data/pinecone_vectors.jsonl.gz` (pre-chunked, pre-embedded 10-K text) into
-Pinecone. Idempotent — safe to re-run. Asserts the index ends up with exactly 4072
-vectors and fails loudly otherwise.
+`load_pinecone.py` loads `data/pinecone_vectors.jsonl.gz` (pre-chunked, pre-embedded
+10-K text) into Pinecone. `load_chunk_text.py` loads the *same* source file's chunk
+text into Postgres' `chunk_text` table — the lexical half of hybrid retrieval (see
+below), sharing ids with the Pinecone vectors. Both are idempotent — safe to re-run —
+and both assert their store ends up with exactly 4072 records, failing loudly
+otherwise.
 
 > **⚠️ Seed-after-restart caveat**: `pinecone-local` has **no persistence** — its data
 > lives only in the running container's memory. Any time you run `docker compose down`
 > (with or without `-v`) and back `up`, or otherwise recreate the `pinecone` container,
 > **you must re-run `make seed`** before the app can answer qualitative questions.
 > `GET /api/health` will report `vector_count: 0` and `ok: false` if you forget.
-> Postgres, by contrast, only needs `01_financial_data.sql`/`02_roles.sql` to re-run
-> after `down -v` specifically (its named volume `pgdata_16` otherwise survives a plain
-> `down`/`up`) — `make down` is deliberately `docker compose down -v` for this reason.
+> Postgres, by contrast, only needs its initdb scripts to re-run after `down -v`
+> specifically (its named volume `pgdata_16` otherwise survives a plain `down`/`up`)
+> — `make down` is deliberately `docker compose down -v` for this reason. `chunk_text`
+> itself persists like the rest of Postgres, but re-running `load_chunk_text.py` is
+> always safe (`ON CONFLICT DO NOTHING`).
 
 ### 4. Run the backend
 
@@ -170,7 +184,7 @@ target runs.
 | Target | Raw command |
 |---|---|
 | `make up` | `docker compose up -d` |
-| `make seed` | `uv run --project backend python scripts/load_pinecone.py` |
+| `make seed` | `uv run --project backend python scripts/load_pinecone.py && uv run --project backend python scripts/load_chunk_text.py` |
 | `make api` | `cd backend && uv run uvicorn app.main:app --reload --port 8000` |
 | `make web` | `npm --prefix frontend run dev` |
 | `make test` | `cd backend && uv run pytest` |
@@ -215,7 +229,7 @@ touch:
 | `OPENAI_CHAT_MODEL` / `OPENAI_EMBED_MODEL` | Model names (defaults: `gpt-4o-mini`, `text-embedding-3-small`). |
 | `EMBED_DIMENSIONS` | Must stay `512` — the provided vectors were embedded at this dimension; changing it breaks retrieval. |
 | `DATABASE_URL` / `AGENT_RO_DATABASE_URL` | App-role vs. read-only-role Postgres connections — the agent's SQL tool only ever uses the latter. |
-| `SCORE_FLOOR` / `TOP_K` | Vector retrieval tuning — chunks scoring below the floor are rejected (visible in the `debug` payload's `rejected_chunks`). |
+| `SCORE_FLOOR` / `TOP_K` | Vector retrieval tuning — chunks scoring below the floor are rejected (visible in the `debug` payload's `rejected_chunks`). `TOP_K` also governs the Postgres full-text search breadth per company and the final per-company cap after RRF fusion — see "Hybrid retrieval" below. |
 | `HISTORY_MAX_MESSAGES` | How many trailing conversation messages (default 8, ≈4 exchanges) the router/synthesizer see verbatim — see "Multi-turn context" below. |
 | `JWT_SECRET` | Change this for anything beyond local dev. |
 | `CORS_ORIGINS` | Frontend origins allowed to call the API. |
@@ -240,6 +254,39 @@ summarization for why that's deferred (a financial Q&A session is a handful
 of exchanges, and an extra per-turn summarization call is itself a
 hallucination surface). It also doesn't survive a page reload — see the next
 point.
+
+## Hybrid retrieval
+
+`vector_retrieve` doesn't rely on Pinecone's dense (cosine-similarity) ranking
+alone. Dense embeddings under-rank exact-term matches — ticker symbols, section
+labels like "Item 1A", specific product names — that are common in financial
+questions but easy for a similarity search to bury under more "semantically
+similar" but less relevant chunks. A second, lexical ranking runs alongside it:
+Postgres full-text search (`tsvector`/`ts_rank_cd`) over the same chunk text,
+loaded into a `chunk_text` table by `scripts/load_chunk_text.py` from the same
+source file Pinecone is seeded from (so both stores share the same chunk ids).
+The question is tokenized into an **OR-combined** query (`word1 | word2 | ...`),
+not `plainto_tsquery`'s default AND — an ordinary multi-word question ANDed
+together almost never matches a single chunk verbatim (verified live: it
+matched zero rows), whereas OR lets a partial match surface and `ts_rank_cd`
+still rewards chunks matching more of the terms.
+
+The two rankings are fused per company with [reciprocal rank
+fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) (RRF) —
+`score(chunk) = Σ 1/(k + rank_in_system)`, summed over whichever of the two
+systems ranked it — before the existing boilerplate/score-floor/dedup filters
+run. RRF combines rankings by *position*, not raw score, which matters here
+because cosine similarity and `ts_rank_cd` aren't on a comparable scale. A
+chunk that only one system finds still surfaces on that system's rank alone;
+a chunk both systems rank well floats to the top.
+
+This degrades gracefully, not silently: `TextSearchTool.query` catches any DB
+error (most likely `chunk_text` not existing yet on a pre-hybrid Postgres
+volume, see the upgrade note in step 2 above) and returns no lexical hits
+rather than raising, so `HybridTool` falls back to dense-only results —
+exactly the pre-hybrid behavior — instead of the whole retrieval node
+crashing. There's no feature flag; hybrid retrieval is simply always wired up
+and quietly no-ops if its table isn't there yet.
 
 ## Known trade-offs and data quirks
 
@@ -276,8 +323,9 @@ Makefile                 # up / seed / api / web / test / eval / down
 data/                    # provided: financial_data.sql (SQL dump), pinecone_vectors.jsonl.gz
 10k_filings/             # provided: raw FY2025 10-K PDFs (Alphabet, Amazon, Apple, Meta)
 scripts/
-  initdb/                # Postgres role setup (agent_ro, read-only)
+  initdb/                # chunk_text table + Postgres role setup (agent_ro, read-only)
   load_pinecone.py        # idempotent vector store seeder
+  load_chunk_text.py      # idempotent chunk_text (full-text search) seeder -- same source file
   eval_baseline.py        # live-stack integration eval
 backend/                 # FastAPI + LangGraph agent (see backend/app/)
 frontend/                # Next.js + AI SDK useChat + shadcn/ui
