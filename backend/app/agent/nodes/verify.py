@@ -91,10 +91,30 @@ def _chunk_text(state: AgentState) -> str:
     return "\n".join(c.get("text", "") for c in (state.get("chunks") or []))
 
 
+_CHUNK_SCALES = (1, 1_000)  # narrower than _SCALES (SQL's raw/M/M/B ladder):
+# chunk-derived narrative numbers only realistically carry the single
+# millions<->billions ambiguity 10-K prose introduces ("$196.6 billion" vs.
+# a financial-statement table's "196,600"), never the full raw-to-billions
+# range -- dividing a large fabricated number by 1e6/1e9 (as tried once,
+# see git history) collapses it toward 0 or 1, and a degenerate "1"/"0"
+# candidate then trivially substring-matches almost any prose, defeating
+# the whole check.
+
+
 def _literally_in_chunks(value: float, chunk_text: str) -> bool:
+    """Still a strict "appears verbatim in the evidence" check, just
+    scale-aware for the one ambiguity real 10-K prose introduces -- not a
+    numeric-tolerance pool like `_grounded_pools`."""
     if not chunk_text:
         return False
-    candidates = {f"{value:,.0f}", f"{value:,.1f}", f"{value:.0f}", f"{value:.1f}", f"{value:g}"}
+    candidates: set[str] = set()
+    for scale in _CHUNK_SCALES:
+        for scaled in (value * scale, value / scale):
+            if abs(scaled) < 1:
+                continue  # e.g. 0.4 -> "0"/"1" would trivially match almost any text
+            candidates.update(
+                {f"{scaled:,.0f}", f"{scaled:,.1f}", f"{scaled:.0f}", f"{scaled:.1f}", f"{scaled:g}"}
+            )
     return any(candidate in chunk_text for candidate in candidates)
 
 

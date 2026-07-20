@@ -72,3 +72,29 @@ def test_no_numbers_in_answer_trivially_passes():
     result = _run(final_answer="I can't ground this qualitative claim for Microsoft.")
     assert result["verify"]["ok"] is True
     assert result["verify"]["ungrounded"] == []
+
+
+def test_fabricated_large_number_does_not_collapse_to_a_degenerate_match():
+    # A wide scale ladder (e.g. dividing by 1e6/1e9 like the SQL pool does)
+    # can collapse a large fabricated number down near 0 or 1, producing a
+    # degenerate "1"/"0" candidate that trivially substring-matches almost
+    # any prose -- this must still be caught as ungrounded.
+    result = _run(
+        final_answer="Meta's revenue reached $999,999 billion.",
+        chunks=[{"company": "Meta", "text": "Meta's revenue reached $134.9 billion in 2025."}],
+    )
+    assert result["verify"]["ok"] is False
+    assert "999,999" in result["verify"]["ungrounded"][0]
+
+
+def test_billions_paraphrase_of_a_millions_scale_chunk_figure_passes():
+    # 10-K financial statements are conventionally "in millions" ("196,600"),
+    # but narrative synthesis often rounds to billions ("$196.6 billion") --
+    # both refer to the same $196.6B figure and must both ground it (found
+    # via live testing once hybrid retrieval started surfacing more
+    # numeric-bearing chunks, see agent/hybrid_tool.py).
+    result = _run(
+        final_answer="Meta's revenue was $196.6 billion.",
+        chunks=[{"company": "Meta", "text": "Meta's total revenue was $196,600 for the year."}],
+    )
+    assert result["verify"]["ok"] is True
