@@ -11,7 +11,8 @@ services:
     volumes:
       - pgdata_16:/var/lib/postgresql/data    # versioned name — survives image major bumps
       - ./data/financial_data.sql:/docker-entrypoint-initdb.d/01_financial_data.sql:ro
-      - ./scripts/initdb/02_roles.sql:/docker-entrypoint-initdb.d/02_roles.sql:ro
+      - ./scripts/initdb/02_chunk_text.sql:/docker-entrypoint-initdb.d/02_chunk_text.sql:ro
+      - ./scripts/initdb/03_roles.sql:/docker-entrypoint-initdb.d/03_roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d findata"]
       interval: 5s

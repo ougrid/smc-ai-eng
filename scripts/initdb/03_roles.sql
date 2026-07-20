@@ -5,6 +5,7 @@ CREATE ROLE agent_ro LOGIN PASSWORD 'agent_ro_local_dev';
 GRANT CONNECT ON DATABASE findata TO agent_ro;
 GRANT USAGE ON SCHEMA public TO agent_ro;
 GRANT SELECT ON TABLE financial_data TO agent_ro;
+GRANT SELECT ON TABLE chunk_text TO agent_ro;   -- lexical half of hybrid retrieval (text_search_tool.py)
 -- Deliberately NO other grants: the users table (created later by role "app")
 -- is invisible to agent_ro, regardless of what SQL an LLM generates.
 
