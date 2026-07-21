@@ -1,4 +1,4 @@
-.PHONY: up seed api web test eval down
+.PHONY: up seed api web test eval eval-ragas down
 
 up:
 	docker compose up -d
@@ -18,6 +18,9 @@ test:
 
 eval:
 	uv run --project backend python scripts/eval_baseline.py
+
+eval-ragas:
+	uv run --project backend --extra eval python scripts/eval_ragas.py
 
 down:
 	docker compose down -v
