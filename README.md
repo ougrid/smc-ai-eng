@@ -197,6 +197,7 @@ target runs.
 | `make web` | `npm --prefix frontend run dev` |
 | `make test` | `cd backend && uv run pytest` |
 | `make eval` | `uv run --project backend python scripts/eval_baseline.py` |
+| `make eval-ragas` | `uv run --project backend --extra eval python scripts/eval_ragas.py` |
 | `make down` | `docker compose down -v` |
 
 ## Testing
@@ -225,6 +226,60 @@ including the LLM calls, retrieval, and the streaming protocol itself. Ground-tr
 growth figures are parsed from `data/financial_data.sql` at run time, never
 hardcoded, so the eval can't silently drift from the shipped data. Exits non-zero if
 any case fails.
+
+## RAGAS quality-scoring eval (optional)
+
+`eval_baseline.py` above answers a binary question — did the app get the baseline
+cases right or not. `scripts/eval_ragas.py` is a quantitative companion: it scores
+**faithfulness** (are the answer's claims actually supported by the retrieved
+evidence — the metric closest to this project's core no-hallucination requirement),
+**answer relevancy**, and — for the two questions with a computed ground-truth
+reference (Q1, Q3) — **context recall** and **context precision**, using
+[RAGAS](https://github.com/vibrantlabsai/ragas)'s modern per-metric classes
+(`ragas.metrics.collections`) against a live backend.
+
+This needs the optional `eval` dependency group, **not installed by default**:
+
+```bash
+uv sync --project backend --extra eval
+uv run --project backend --extra eval python scripts/eval_ragas.py
+# or: make eval-ragas
+```
+
+`ragas` is kept out of the core `dependencies` list deliberately — it pulls in
+Hugging Face `datasets`, which pulls in `pyarrow`, neither of which the app or its
+main test suite need. A plain `uv sync` / `uv run pytest` never touches either
+package. See the two caveats below if you install the `eval` extra.
+
+> **⚠️ Windows: Application Control may block `pyarrow`**. On a Windows machine
+> with Smart App Control or another WDAC-based policy active, `pyarrow`'s compiled
+> extension can fail to load with `ImportError: DLL load failed... An Application
+> Control policy has blocked this file`. This is a real Windows security feature
+> doing its job (blocking an unsigned/unrecognized binary), not a bug in this repo
+> — but it's worth knowing before you hit it, since the fix has a real cost.
+> Diagnose which mechanism is active before touching anything:
+> ```powershell
+> Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" -Name "VerifiedAndReputablePolicyState"
+> # 0 = Off, 1 = Evaluation, 2 = On (enforced)
+> ```
+> If it's in Evaluation mode, the supported fix is **Windows Security → App &
+> browser control → Smart App Control → Off**, then reboot. **This is one-way**:
+> Microsoft's official position is that Smart App Control cannot be re-enabled on
+> the same Windows install without a clean reinstall once turned off — don't do
+> this if you're not prepared for that trade-off. If it shows `2` (On/enforced),
+> the UI option to turn it off is gone entirely; this only works from Evaluation
+> mode. Only relevant if you install the `eval` extra — the core app and test suite
+> never need `pyarrow` at all.
+
+> **Note on a real ragas/langchain-community incompatibility**: `ragas==0.4.3` (the
+> latest release as of this writing) unconditionally imports
+> `langchain_community.chat_models.vertexai` at module load time, but that module
+> was removed from current `langchain-community` releases as part of its own
+> deprecation (VertexAI moved to `langchain-google-vertexai`). Since `ragas`
+> declares no version constraint on `langchain-community`, an unpinned install
+> resolves the latest (broken) one. `backend/pyproject.toml`'s `eval` extra pins
+> `langchain-community==0.3.31` (the last pre-removal release) to work around
+> this — already handled for you, just explaining the otherwise-mysterious pin.
 
 ## Environment variables
 
@@ -367,14 +422,15 @@ the caveat below.
 ```
 docker-compose.yml       # postgres + pinecone-local + adminer (data stack only; apps run on host)
 .env.example             # copy to .env and fill in OPENAI_API_KEY
-Makefile                 # up / seed / api / web / test / eval / down
+Makefile                 # up / seed / api / web / test / eval / eval-ragas / down
 data/                    # provided: financial_data.sql (SQL dump), pinecone_vectors.jsonl.gz
 10k_filings/             # provided: raw FY2025 10-K PDFs (Alphabet, Amazon, Apple, Meta)
 scripts/
   initdb/                # chunk_text table + Postgres role setup (agent_ro, read-only)
   load_pinecone.py        # idempotent vector store seeder
   load_chunk_text.py      # idempotent chunk_text (full-text search) seeder -- same source file
-  eval_baseline.py        # live-stack integration eval
+  eval_baseline.py        # live-stack integration eval (pass/fail)
+  eval_ragas.py           # live-stack quality scoring (faithfulness/relevancy/etc) -- needs `--extra eval`
 backend/                 # FastAPI + LangGraph agent (see backend/app/)
 frontend/                # Next.js + AI SDK useChat + shadcn/ui
 docs/                    # design docs — source of truth for scope/architecture decisions
