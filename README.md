@@ -663,9 +663,11 @@ Remaining, grouped by concern:
   node; calibrated answer-with-abstention thresholds tuned on a golden set; self-corrective
   retrieval (CRAG/Self-RAG) with a relevance-grading + query-rewrite loop.
 - **Retrieval quality** — true BM25 (the current lexical half is Postgres `ts_rank_cd`, a
-  zero-infra stand-in); structure-aware re-ingestion by 10-K item section (Item 1A Risk Factors,
-  Item 7 MD&A) for filtered retrieval and to fix boilerplate at the source; small-to-big /
-  parent-document retrieval.
+  zero-infra stand-in); **structure-aware re-ingestion** — the spec's "Option B" (`Take-Home
+  Task.pdf` §6) — by 10-K item section (Item 1A Risk Factors, Item 7 MD&A) for filtered
+  retrieval and to fix boilerplate at the source, config-gated so the default Option-A fixture
+  is never touched; full plan in [`docs/option-b-reingest-plan.md`](docs/option-b-reingest-plan.md);
+  small-to-big / parent-document retrieval.
 - **Text-to-SQL robustness** — a semantic layer of vetted named metrics the LLM parameterizes
   instead of free-writing SQL; `EXPLAIN` dry-run + result-shape sanity checks.
 - **Evaluation & observability** — LangSmith/Langfuse tracing spans per node with a distributed
