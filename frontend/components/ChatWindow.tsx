@@ -52,7 +52,10 @@ export function ChatWindow() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
-      <ScrollArea className="flex-1 p-4 sm:p-6">
+      {/* min-h-0 overrides the flex child's implicit min-height:auto so the
+          viewport is actually height-constrained and overflows internally --
+          without it the area grows with content and the card clips it. */}
+      <ScrollArea className="min-h-0 flex-1 p-4 sm:p-6">
         <div className="flex flex-col gap-4">
           {messages.length === 0 && (
             <div className="flex flex-col items-center gap-4 py-10 text-center">
