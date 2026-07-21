@@ -1,9 +1,16 @@
+"use client";
+
 import type { UIMessage } from "ai";
+import { Check, Copy } from "lucide-react";
+import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { CitationList } from "@/components/CitationList";
+import { Markdown } from "@/components/Markdown";
 import { RouteBadge } from "@/components/RouteBadge";
+import { TypingIndicator } from "@/components/TypingIndicator";
 
 type RouteData = { route?: string };
 type CoverageData = { notes?: string[] };
@@ -21,6 +28,27 @@ type Chunk = {
 function partData<T>(message: UIMessage, type: string): T | undefined {
   const part = message.parts.find((p) => p.type === type) as { data?: T } | undefined;
   return part?.data;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      className="text-muted-foreground hover:text-foreground"
+      aria-label="Copy answer"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+    </Button>
+  );
 }
 
 export function MessageBubble({
@@ -44,10 +72,17 @@ export function MessageBubble({
   const verify = partData<VerifyData>(message, "data-verify");
 
   const provisional = isStreaming && !isUser && !verify;
+  const hasContent = Boolean(route || text || citations || verify);
+
+  // Nothing has arrived from the graph yet -- show a typing cue instead of
+  // an empty bubble.
+  if (!isUser && isStreaming && !hasContent) {
+    return <TypingIndicator />;
+  }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div className={`flex max-w-[80%] flex-col gap-1.5 ${isUser ? "items-end" : "items-start"}`}>
+      <div className={`flex max-w-[85%] flex-col gap-1.5 sm:max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
         {!isUser && (route || verify) && (
           <div className="flex items-center gap-1.5">
             <RouteBadge route={route} />
@@ -57,12 +92,23 @@ export function MessageBubble({
           </div>
         )}
         <div
-          className={`rounded-lg px-3 py-2 text-sm ${
-            isUser ? "bg-primary text-primary-foreground" : "bg-muted"
+          className={`group relative rounded-2xl px-4 py-2.5 ${
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted"
           } ${provisional ? "opacity-70" : ""}`}
         >
-          {text || <span className="italic text-muted-foreground">...</span>}
+          {isUser ? (
+            <p className="text-sm">{text}</p>
+          ) : text ? (
+            <Markdown text={text} />
+          ) : (
+            <span className="text-sm italic text-muted-foreground">...</span>
+          )}
         </div>
+        {!isUser && !provisional && text && (
+          <CopyButton text={text} />
+        )}
         {!isUser && coverageNotes && coverageNotes.length > 0 && (
           <Alert className="w-full">
             <AlertDescription>{coverageNotes.join(" ")}</AlertDescription>
