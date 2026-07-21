@@ -1,10 +1,12 @@
-"""refuse: deterministic bilingual template, no LLM call. Three template
+"""refuse: deterministic bilingual template, no LLM call. Four template
 families, distinguished by `state["refusal_reason"]`: out-of-scope (the
 intent gate caught an off-topic question), data-unavailable (the coverage
-gate couldn't resolve a company, year range, or 10-K), and
-unverified-numbers (the Day-4 `verify` node's numeric-consistency guard
-failed twice -- the draft answer is discarded, never annotated, per
-docs/technical-execution-plan.md E6).
+gate couldn't resolve a company, year range, or 10-K), unverified-numbers
+(the Day-4 `verify` node's numeric-consistency guard failed twice), and
+unverified-citations (`verify`'s citation-resolution guard found a
+`[Source, p.N]` marker that never resolved to a retrieved chunk) -- in
+either verify failure case the draft answer is discarded, never annotated,
+per docs/technical-execution-plan.md E6.
 """
 
 from app.agent.state import AgentState
@@ -42,6 +44,18 @@ _UNVERIFIED_NUMBERS = {
     ),
 }
 
+_UNVERIFIED_CITATIONS = {
+    "en": (
+        "I found a draft answer, but one of its citations didn't match any of "
+        "the retrieved evidence, so I can't give you a fully grounded response "
+        "to this question."
+    ),
+    "th": (
+        "ฉันพบคำตอบร่างไว้แล้ว แต่การอ้างอิงในคำตอบไม่ตรงกับข้อมูลที่ดึงมาได้ "
+        "จึงไม่สามารถให้คำตอบที่มีข้อมูลรองรับครบถ้วนสำหรับคำถามนี้ได้"
+    ),
+}
+
 
 def _language_of(state: AgentState) -> str:
     route = state.get("route") or {}
@@ -56,6 +70,8 @@ def refuse_node(state: AgentState) -> dict:
         answer = _OUT_OF_SCOPE[language]
     elif reason == "unverified_numbers":
         answer = _UNVERIFIED_NUMBERS[language]
+    elif reason == "unverified_citations":
+        answer = _UNVERIFIED_CITATIONS[language]
     else:
         notes = state.get("coverage_notes") or []
         answer = _DATA_UNAVAILABLE[language]

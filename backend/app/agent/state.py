@@ -10,6 +10,7 @@ from typing import Any, TypedDict
 class VerifyResult(TypedDict, total=False):
     ok: bool
     ungrounded: list[str]
+    dangling_citations: list[str]
     attempt: int
 
 

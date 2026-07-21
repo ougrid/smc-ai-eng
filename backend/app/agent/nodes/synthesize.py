@@ -141,13 +141,26 @@ def build_synthesize_node(synth_llm: SynthesisLLM, *, history_max_messages: int 
         )
         prior_verify = state.get("verify")
         if prior_verify and not prior_verify.get("ok"):
-            ungrounded = ", ".join(prior_verify.get("ungrounded", []))
-            human_message += (
-                f"\n\nYour previous answer included numbers that could not be verified "
-                f"against the evidence above: {ungrounded}. Regenerate the answer using "
-                "ONLY numbers that appear in the evidence -- drop or rephrase any claim "
-                "you cannot support instead of repeating an unverifiable figure."
-            )
+            hints: list[str] = []
+            if prior_verify.get("ungrounded"):
+                ungrounded = ", ".join(prior_verify["ungrounded"])
+                hints.append(
+                    f"Your previous answer included numbers that could not be verified "
+                    f"against the evidence above: {ungrounded}. Regenerate the answer using "
+                    "ONLY numbers that appear in the evidence -- drop or rephrase any claim "
+                    "you cannot support instead of repeating an unverifiable figure."
+                )
+            if prior_verify.get("dangling_citations"):
+                dangling = ", ".join(prior_verify["dangling_citations"])
+                hints.append(
+                    f"Your previous answer included a citation that did not match any "
+                    f"retrieved evidence chunk: {dangling}. Regenerate using ONLY "
+                    "[Source, p.N] citations that exactly match a chunk given in the "
+                    "evidence above -- drop the citation, or the claim it supports, if "
+                    "you cannot find a matching chunk."
+                )
+            for hint in hints:
+                human_message += f"\n\n{hint}"
         # Last thing the model reads -- recency helps instruction-following,
         # and this is the exact bug the language directive exists to prevent
         # (see agent-output/day3-smoke-test-findings.md and the Day-4 fix:
