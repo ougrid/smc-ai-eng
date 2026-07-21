@@ -85,6 +85,44 @@ def test_missing_parsing_error_behaves_identically_to_present_one():
     assert llm.calls == 2
 
 
+# --- investment-flavored questions are financial, still gated for coverage ---
+
+
+def test_investment_question_about_covered_company_routes_to_data():
+    # "Should I invest in Apple?" -> the prompt tells the LLM to classify this
+    # financial; the node must route it to data (not refuse) and resolve Apple.
+    llm = _StubRouteLLM([_ok(_parsed(metrics=["revenue"], route="sql"))])
+    result = _run(llm)
+    assert result["effective_route"] == "sql"
+    assert result["companies"] == ["Apple"]
+    assert result["refusal_reason"] is None
+
+
+def test_investment_question_about_unknown_company_still_refuses_via_gate():
+    # Coverage gate is NOT weakened: an investment question about a company we
+    # have no data for still fails closed, even when classified financial.
+    llm = _StubRouteLLM(
+        [
+            _ok(
+                _parsed(
+                    companies=[
+                        CompanyMention(mentioned="Netflix", canonical="Netflix", confident=True)
+                    ],
+                    metrics=["revenue"],
+                    route="sql",
+                )
+            )
+        ]
+    )
+    result = _run(llm)
+    assert result["effective_route"] == "refuse"
+    assert result["refusal_reason"] == "unknown_company"
+
+
+def test_system_prompt_instructs_investment_questions_as_financial():
+    assert "invest" in SYSTEM_PROMPT.lower()
+
+
 def test_intent_off_topic_routes_to_refuse():
     llm = _StubRouteLLM(
         [_ok(_parsed(intent="off_topic", companies=[], years=[], route="refuse"))]
