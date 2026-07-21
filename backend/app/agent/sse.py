@@ -237,7 +237,6 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
                 text_id = f"draft-{draft_index}"
                 extractor = AnswerFieldExtractor()
 
-    yield sse({"type": "finish-step"})
     # Everything below is already in state for free -- per docs/technical-
     # execution-plan.md E7, `debug` also carries the emitted SQL, computed
     # growth figures, and rejected vector chunks (incl. below-floor/
@@ -251,6 +250,12 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
         debug["computed"] = final_state["computed"]
     if "rejected_chunks" in final_state:
         debug["rejected_chunks"] = final_state["rejected_chunks"]
+    # Also surface the debug payload as a data part (fixed id, like
+    # data-citations/data-verify) so the UI's dev/debug mode can render it off
+    # the same reliable channel rather than depending on finish metadata
+    # propagation. Emitted before finish-step so it lands with the message.
+    yield sse({"type": "data-debug", "id": "debug-1", "data": debug})
+    yield sse({"type": "finish-step"})
     yield sse(
         {
             "type": "finish",
