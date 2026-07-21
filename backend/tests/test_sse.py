@@ -154,6 +154,7 @@ async def test_sql_happy_path_part_ordering():
         "text-start",
         "text-delta",
         "text-end",
+        "data-debug",
         "finish-step",
         "finish",
     ]
@@ -193,7 +194,7 @@ async def test_clarify_sequence_has_no_citations_or_verify_part():
     parsed = _types_of(await _collect(scripted))
     kinds = [p["type"] for p in parsed]
 
-    assert kinds == ["start", "start-step", "data-route", "text-start", "text-delta", "text-end", "finish-step", "finish"]
+    assert kinds == ["start", "start-step", "data-route", "text-start", "text-delta", "text-end", "data-debug", "finish-step", "finish"]
     assert not any(p["type"] == "data-citations" for p in parsed)
     assert not any(p["type"] == "data-verify" for p in parsed)
 
@@ -362,6 +363,65 @@ async def test_synthesize_status_re_emitted_on_verify_retry_with_same_id():
 
     assert [p["data"]["stage"] for p in status_parts] == ["synthesize", "synthesize"]
     assert all(p["id"] == "status-1" for p in status_parts)
+
+
+@pytest.mark.asyncio
+async def test_data_debug_part_carries_full_pipeline_payload():
+    envelope_json = json.dumps(
+        {"reasoning": "r", "answer": "Apple net income was $93,736M in 2024.", "citations": []}
+    )
+    scripted = [
+        {
+            "event": "on_chain_end",
+            "name": "route",
+            "tags": [],
+            "data": {
+                "output": {
+                    "effective_route": "sql",
+                    "companies": ["Apple"],
+                    "years": [2024],
+                    "coverage_notes": [],
+                    "debug": {
+                        "route_decision": {"intent": "financial", "language": "en"},
+                        "gate_result": {"companies": ["Apple"], "refusal_reason": None},
+                    },
+                }
+            },
+        },
+        {
+            "event": "on_chain_end",
+            "name": "sql_retrieve",
+            "tags": [],
+            "data": {
+                "output": {
+                    "sql_rows": [{"company": "Apple", "year": 2024, "net_income": 93736000000}],
+                    "sql": "SELECT net_income FROM financial_data WHERE company = 'Apple'",
+                    "computed": {"Apple": {"net_income_2024": 93736000000}},
+                }
+            },
+        },
+        *_chat_model_stream_events(envelope_json),
+        _synthesize_end_event("Apple net income was $93,736M in 2024."),
+        _verify_event(True, [], 1),
+    ]
+
+    parsed = _types_of(await _collect(scripted))
+    debug_parts = [p for p in parsed if p["type"] == "data-debug"]
+
+    # exactly one debug part, fixed id, emitted before finish-step
+    assert len(debug_parts) == 1
+    assert debug_parts[0]["id"] == "debug-1"
+    kinds = [p["type"] for p in parsed]
+    assert kinds.index("data-debug") < kinds.index("finish-step")
+
+    data = debug_parts[0]["data"]
+    # carries the router's own debug, the executed SQL, the Python-computed
+    # figures, and the deterministic verify result -- the demo/dev payload
+    assert data["route_decision"]["intent"] == "financial"
+    assert data["gate_result"]["refusal_reason"] is None
+    assert data["sql"].startswith("SELECT")
+    assert data["computed"]["Apple"]["net_income_2024"] == 93736000000
+    assert data["verify"] == {"ok": True, "ungrounded": [], "attempt": 1}
 
 
 def test_sse_helper_keeps_non_ascii_readable():
