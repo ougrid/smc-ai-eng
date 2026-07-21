@@ -8,9 +8,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CitationList } from "@/components/CitationList";
+import { DebugPanel, type DebugData } from "@/components/DebugPanel";
 import { Markdown } from "@/components/Markdown";
 import { RouteBadge } from "@/components/RouteBadge";
 import { TypingDots, TypingIndicator } from "@/components/TypingIndicator";
+import { useDevMode } from "@/hooks/use-dev-mode";
 
 type RouteData = { route?: string };
 type CoverageData = { notes?: string[] };
@@ -60,6 +62,7 @@ export function MessageBubble({
   isStreaming?: boolean;
 }) {
   const isUser = message.role === "user";
+  const devMode = useDevMode();
 
   // Stream-veto rule: a failed verify redrafts the answer as a brand-new
   // text part rather than editing the old one, so multiple "text" parts can
@@ -75,6 +78,7 @@ export function MessageBubble({
   // to the latest stage rather than accumulating). Only meaningful before the
   // answer text starts streaming; hidden once it does.
   const statusLabel = partData<StatusData>(message, "data-status")?.label;
+  const debug = partData<DebugData>(message, "data-debug");
 
   const provisional = isStreaming && !isUser && !verify;
   const hasContent = Boolean(route || text || citations || verify || statusLabel);
@@ -151,6 +155,7 @@ export function MessageBubble({
         {!isUser && citations && (
           <CitationList sqlRows={citations.sql_rows} chunks={citations.chunks} />
         )}
+        {!isUser && devMode && <DebugPanel debug={debug} />}
       </div>
     </div>
   );

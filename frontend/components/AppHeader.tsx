@@ -3,6 +3,7 @@
 import { LogOut, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+import { DevModeToggle } from "@/components/DevModeToggle";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -41,6 +42,7 @@ export function AppHeader() {
         <span className="text-sm font-semibold tracking-tight">Financial Q&A</span>
       </div>
       <div className="flex items-center gap-2">
+        <DevModeToggle />
         <ThemeToggle />
         {loading ? (
           <Skeleton className="size-8 rounded-full" />
