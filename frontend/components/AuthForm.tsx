@@ -1,5 +1,7 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -45,8 +47,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm shadow-lg">
       <CardHeader>
+        <div className="mb-1 flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+          <Sparkles className="size-5" />
+        </div>
         <CardTitle>{mode === "login" ? "Log in" : "Create an account"}</CardTitle>
         <CardDescription>
           {mode === "login"
@@ -94,6 +99,23 @@ export function AuthForm({ mode }: { mode: Mode }) {
             {submitting ? "Please wait..." : mode === "login" ? "Log in" : "Register"}
           </Button>
         </form>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {mode === "login" ? (
+            <>
+              Don&apos;t have an account?{" "}
+              <Link href="/register" className="font-medium text-foreground underline underline-offset-2">
+                Register
+              </Link>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <Link href="/login" className="font-medium text-foreground underline underline-offset-2">
+                Log in
+              </Link>
+            </>
+          )}
+        </p>
       </CardContent>
     </Card>
   );
