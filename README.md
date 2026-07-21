@@ -30,7 +30,7 @@ flowchart LR
     SQLT -->|hybrid| VEC
     SQLT --> S[synthesize<br/>evidence-only]
     VEC --> S
-    S --> V[verify<br/>numeric-consistency guard<br/>deterministic, no LLM]
+    S --> V[verify<br/>numeric + citation guard<br/>deterministic, no LLM]
     V -->|grounded| A[streamed answer<br/>+ route + citations + debug]
     V -->|ungrounded, 1 retry left| S
     V -->|still ungrounded| REF
@@ -61,8 +61,11 @@ flowchart LR
   coverage gaps stated explicitly in the answer text, answer language set explicitly
   from the router's detection (not re-inferred from prose).
 - **verify**: deterministic, no LLM. Extracts every number in the draft answer and
-  checks it's grounded in the retrieved evidence. One retry on failure, then a
-  fail-closed refusal — the draft is discarded, never annotated.
+  checks it's grounded in the retrieved evidence, and separately extracts every
+  `[Source, p.N]` citation marker and checks it resolves to a chunk that was
+  actually retrieved (a marker pointing at a source/page never retrieved is
+  "dangling"). One retry on either kind of failure, then a fail-closed refusal —
+  the draft is discarded, never annotated.
 - Auth (JWT + bcrypt) and the streaming transport (SSE, AI SDK UI message stream
   protocol) are deliberately decoupled from the agent internals, kept simple to extend
   in a follow-up session.
