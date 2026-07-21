@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smc-postgres
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_local_dev        # local-only; never used outside compose
+      POSTGRES_DB: findata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_16:/var/lib/postgresql/data    # versioned name — survives image major bumps
+      - ./data/financial_data.sql:/docker-entrypoint-initdb.d/01_financial_data.sql:ro
+      - ./scripts/initdb/02_chunk_text.sql:/docker-entrypoint-initdb.d/02_chunk_text.sql:ro
+      - ./scripts/initdb/03_roles.sql:/docker-entrypoint-initdb.d/03_roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d findata"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  pinecone:
+    image: ghcr.io/pinecone-io/pinecone-local:latest
+    container_name: smc-pinecone
+    platform: linux/amd64
+    environment:
+      PORT: "5080"                # control plane
+      PINECONE_HOST: localhost    # hosts returned by describe_index → localhost:508x, resolvable from host
+    ports:
+      - "5080-5090:5080-5090"     # 5080 = control plane; each index gets a data-plane port in 5081-5090
+    # no healthcheck: image has no shell/curl; readiness handled by load_pinecone.py retry loop
+
+  adminer:
+    image: adminer:latest
+    container_name: smc-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata_16:

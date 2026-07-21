@@ -1,0 +1,39 @@
+# Agent-generated output (scratch results, logs, analysis artifacts) - never commit
+agent-output/*
+!agent-output/.gitkeep
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.next/
+
+# Docker / data volumes
+*.pgdata/
+pgdata/
+pinecone-local-data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
