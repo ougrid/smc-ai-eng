@@ -25,7 +25,7 @@ flowchart LR
     G -->|off-topic / unknown data| REF[refuse]
     G -->|vague / ambiguous| CL[clarify]
     G -->|quantitative| SQLT[sql_retrieve<br/>LLM SQL + validator<br/>+ read-only DB role]
-    G -->|qualitative| VEC[vector_retrieve<br/>per-company Pinecone query]
+    G -->|qualitative| VEC[vector_retrieve<br/>hybrid + reranked<br/>per-company]
     G -->|both| SQLT
     SQLT -->|hybrid| VEC
     SQLT --> S[synthesize<br/>evidence-only]
@@ -55,7 +55,9 @@ flowchart LR
   print-to-PDF header-noise chunks, and near-duplicate chunks (the provided dataset
   contains most real chunks twice under different ids — see "Known data quirks" below).
   The dense Pinecone ranking is fused with a lexical Postgres full-text ranking via
-  reciprocal rank fusion before these filters run — see "Hybrid retrieval" below.
+  reciprocal rank fusion before these filters run — see "Hybrid retrieval" below. The
+  fused pool is then reranked by a local cross-encoder and cut down to the final
+  evidence set — see "Reranking" below.
 - **synthesize**: strict evidence-only contract (structured output) — quantitative
   claims only from SQL/computed figures, qualitative claims cited `[Source, p.N]`,
   coverage gaps stated explicitly in the answer text, answer language set explicitly
@@ -77,6 +79,9 @@ flowchart LR
 - Node.js 20+ and npm
 - An OpenAI API key (a small $10-budget key is fine — the app costs well under $2 for
   the full baseline + eval run at `gpt-4o-mini` prices)
+- ~2GB free disk and one-time internet access for `backend/`'s Python deps: the
+  reranker (see "Reranking" below) pulls in `torch`/`sentence-transformers` and
+  downloads a ~1GB cross-encoder model from Hugging Face on first use.
 
 Versions this was built and verified against: Docker Compose v5, uv 0.11, Node 24,
 npm 11. Nothing here is version-pinned tightly; anything reasonably recent should work.
@@ -232,7 +237,9 @@ touch:
 | `OPENAI_CHAT_MODEL` / `OPENAI_EMBED_MODEL` | Model names (defaults: `gpt-4o-mini`, `text-embedding-3-small`). |
 | `EMBED_DIMENSIONS` | Must stay `512` — the provided vectors were embedded at this dimension; changing it breaks retrieval. |
 | `DATABASE_URL` / `AGENT_RO_DATABASE_URL` | App-role vs. read-only-role Postgres connections — the agent's SQL tool only ever uses the latter. |
-| `SCORE_FLOOR` / `TOP_K` | Vector retrieval tuning — chunks scoring below the floor are rejected (visible in the `debug` payload's `rejected_chunks`). `TOP_K` also governs the Postgres full-text search breadth per company and the final per-company cap after RRF fusion — see "Hybrid retrieval" below. |
+| `SCORE_FLOOR` | Dense-retrieval floor — chunks scoring below it are rejected (visible in the `debug` payload's `rejected_chunks`). |
+| `TOP_K` | **Final** per-company evidence count, after reranking. |
+| `RERANK_POOL_SIZE` / `RERANKER_MODEL` | Pre-rerank retrieval breadth (Pinecone top-k, full-text search LIMIT, and the RRF fusion cap all use this, default 30) and the cross-encoder model name — see "Hybrid retrieval" and "Reranking" below. |
 | `HISTORY_MAX_MESSAGES` | How many trailing conversation messages (default 8, ≈4 exchanges) the router/synthesizer see verbatim — see "Multi-turn context" below. |
 | `JWT_SECRET` | Change this for anything beyond local dev. |
 | `CORS_ORIGINS` | Frontend origins allowed to call the API. |
@@ -290,6 +297,44 @@ rather than raising, so `HybridTool` falls back to dense-only results —
 exactly the pre-hybrid behavior — instead of the whole retrieval node
 crashing. There's no feature flag; hybrid retrieval is simply always wired up
 and quietly no-ops if its table isn't there yet.
+
+## Reranking
+
+Fusing dense and lexical rankings widens *recall* — more relevant chunks make
+it into the candidate pool — but RRF's rank-position scoring is still a cruder
+relevance signal than actually reading question and chunk together. The final
+step narrows that wider pool back down with a **cross-encoder**: unlike dense
+or lexical retrieval, which score each chunk against the question
+independently, a cross-encoder scores the `(question, chunk)` *pair* jointly,
+which is the highest-precision signal in this pipeline — at the cost of being
+too slow to run over the whole index, which is why it only ever sees the
+already-narrowed hybrid pool, never the raw store.
+
+Concretely: `HybridTool` now retrieves a wider pool per company
+(`RERANK_POOL_SIZE`, default 30, up from the old `TOP_K`), and `RerankedTool`
+reranks that pool with a local `bge-reranker-v2-m3` cross-encoder
+(`sentence-transformers`), cutting it back down to `TOP_K` (default 10) per
+company — never pooled across companies, for the same skew reason the rest of
+retrieval avoids a single global top-k (see "Architecture" above).
+
+**Why a local model, not a hosted rerank API** (e.g. Cohere): this project
+committed to an OpenAI-only stack (see `docs/implementation-plan.md`'s Auth
+section for the same reasoning applied to auth providers) — adding a second
+paid third-party provider for one node didn't fit that decision. The
+tradeoff is a new, large dependency: `sentence-transformers` pulls in `torch`,
+and the model itself (~1GB) downloads from Hugging Face on first use — see
+the caveat below.
+
+> **First-run model download**: the reranker model isn't bundled or
+> pre-downloaded — the first time the backend actually retrieves and reranks
+> chunks (not at `docker compose up`, at the first relevant `/api/chat`
+> request), `sentence-transformers` downloads `BAAI/bge-reranker-v2-m3`
+> (~1GB) from Hugging Face and caches it locally (`~/.cache/huggingface` by
+> default). This needs internet access once and takes a while depending on
+> connection speed; subsequent requests reuse the cached model. If the
+> reranker fails to load for any reason, retrieval degrades to the
+> pre-rerank ordering rather than erroring — same fail-open philosophy as
+> hybrid retrieval above.
 
 ## Known trade-offs and data quirks
 
