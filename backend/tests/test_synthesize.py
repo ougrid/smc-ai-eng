@@ -178,3 +178,30 @@ def test_verify_retry_hint_reaches_the_llm_prompt():
     human_message = captured["messages"][1][1]
     assert "999,999" in human_message
     assert "could not be verified" in human_message
+
+
+def test_dangling_citation_retry_hint_reaches_the_llm_prompt():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="corrected"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node(
+        {
+            "question": "q",
+            "sql_rows": [{"company": "Apple", "year": 2025}],
+            "verify": {
+                "ok": False,
+                "ungrounded": [],
+                "dangling_citations": ["[Meta_10K.pdf, p.99]"],
+                "attempt": 1,
+            },
+        },
+        {},
+    )
+    human_message = captured["messages"][1][1]
+    assert "[Meta_10K.pdf, p.99]" in human_message
+    assert "did not match any" in human_message

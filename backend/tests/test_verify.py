@@ -46,8 +46,67 @@ def test_years_in_state_are_always_grounded():
 
 
 def test_page_citation_numbers_are_not_flagged():
-    result = _run(final_answer="Meta grew due to ad revenue [Meta_10K.pdf, p.12].")
+    result = _run(
+        final_answer="Meta grew due to ad revenue [Meta_10K.pdf, p.12].",
+        chunks=[{"company": "Meta", "source": "Meta_10K.pdf", "page": 12, "text": "ad revenue grew"}],
+    )
     assert result["verify"]["ok"] is True
+
+
+def test_citation_matching_a_retrieved_chunk_passes():
+    result = _run(
+        final_answer="Meta's ad revenue grew [Meta_10K.pdf, p.12].",
+        chunks=[{"company": "Meta", "source": "Meta_10K.pdf", "page": 12, "text": "ad revenue grew"}],
+    )
+    assert result["verify"]["ok"] is True
+    assert result["verify"]["dangling_citations"] == []
+
+
+def test_citation_matching_is_case_and_whitespace_insensitive():
+    result = _run(
+        final_answer="Meta's ad revenue grew [ meta_10k.pdf , p. 12 ].",
+        chunks=[{"company": "Meta", "source": "Meta_10K.pdf", "page": 12, "text": "ad revenue grew"}],
+    )
+    assert result["verify"]["ok"] is True
+
+
+def test_citation_with_no_matching_chunk_is_dangling():
+    result = _run(
+        final_answer="Meta's ad revenue grew [Meta_10K.pdf, p.99].",
+        chunks=[{"company": "Meta", "source": "Meta_10K.pdf", "page": 12, "text": "ad revenue grew"}],
+    )
+    assert result["verify"]["ok"] is False
+    assert result["verify"]["dangling_citations"] == ["[Meta_10K.pdf, p.99]"]
+    assert result["refusal_reason"] == "unverified_citations"
+
+
+def test_citation_with_no_chunks_at_all_is_dangling():
+    result = _run(final_answer="Meta's ad revenue grew [Meta_10K.pdf, p.12].")
+    assert result["verify"]["ok"] is False
+    assert result["verify"]["dangling_citations"] == ["[Meta_10K.pdf, p.12]"]
+
+
+def test_one_valid_and_one_dangling_citation_flags_only_the_dangling_one():
+    result = _run(
+        final_answer=(
+            "Meta grew due to ad revenue [Meta_10K.pdf, p.12], while Apple's "
+            "strategy notes cite a page never retrieved [Apple_10K.pdf, p.7]."
+        ),
+        chunks=[{"company": "Meta", "source": "Meta_10K.pdf", "page": 12, "text": "ad revenue grew"}],
+    )
+    assert result["verify"]["ok"] is False
+    assert result["verify"]["dangling_citations"] == ["[Apple_10K.pdf, p.7]"]
+
+
+def test_ungrounded_number_takes_precedence_over_dangling_citation_in_refusal_reason():
+    result = _run(
+        final_answer="Apple's net income was $999,999M in 2024 [Meta_10K.pdf, p.99].",
+        sql_rows=[{"company": "Apple", "year": 2024, "net_income": 93736000000}],
+    )
+    assert result["verify"]["ok"] is False
+    assert result["verify"]["ungrounded"] != []
+    assert result["verify"]["dangling_citations"] != []
+    assert result["refusal_reason"] == "unverified_numbers"
 
 
 def test_number_literally_quoted_in_chunk_text_passes():
