@@ -300,16 +300,30 @@ FastAPI — no hand-rolled SSE parsing. Custom data parts drive the UI
   confidence, so bars are relative, not absolute).
 - **"Not fully verified" badge** on any answer where verify didn't pass, and a coverage-note
   banner reproducing the gate's notes.
+- **Debug mode (demo toggle)** — a bug-icon toggle in the header (persisted in `localStorage`,
+  synced across the tree via a `useSyncExternalStore` store) reveals a collapsible **pipeline
+  internals** panel under each answer. It renders the agent's own reasoning trail, so a
+  reviewer can watch the anti-hallucination machinery work rather than take it on faith:
+  - **Verification** — grounded pass/fail, any ungrounded number tokens, dangling citations,
+    and the attempt counter (showing the retry-then-fail-closed path).
+  - **Executed SQL** — the exact allowlisted, read-only `SELECT` that ran.
+  - **Python-computed figures** — the growth math done in code, not by the LLM.
+  - **Retrieval** — how many chunks were dropped and *why* (below score floor / boilerplate /
+    duplicate / reranked-out).
+  - **Router decision & coverage gate** — the raw intent classification, entity resolution,
+    and the deterministic gate's kept/dropped companies, trimmed years, and refusal reason.
 
-The `finish` event also carries an always-on `debug` payload — the router's structured
-extraction, the emitted SQL, per-company vector scores *including below-floor rejects*, and
-the verify result — turning "why did it refuse / route that way?" into reading a JSON field.
+The panel is fed by a `data-debug` SSE part (fixed id `debug-1`, emitted alongside the
+answer) carrying the same payload the `finish` event exposes as `messageMetadata.debug` —
+the router's structured extraction, the emitted SQL, Python-computed growth, per-company
+vector scores *including below-floor rejects*, and the verify result. Turning "why did it
+refuse / route that way?" into reading a labeled panel.
 
 ## Evaluation strategy
 
 Four complementary tiers.
 
-### (a) Offline unit suite — **196 tests**, fully stubbed, `$0`
+### (a) Offline unit suite — **201 tests**, fully stubbed, `$0`
 `backend/tests/`
 
 ```bash
@@ -644,7 +658,7 @@ backend/
       reranker.py · reranked_tool.py · growth.py · history.py · schemas.py · sse.py
       nodes/             # route · sql_retrieve · vector_retrieve · synthesize · verify · refuse · clarify
     clients/             # openai + pinecone client builders
-  tests/                 # 196 offline tests (stub injection, $0)
+  tests/                 # 201 offline tests (stub injection, $0)
 frontend/                # Next.js 16 + AI SDK useChat + shadcn/ui
 docs/                    # design docs — source of truth for scope/architecture decisions
 agent-output/            # gitignored scratch space for AI-agent-generated drafts
