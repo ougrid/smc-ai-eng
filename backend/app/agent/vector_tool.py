@@ -58,7 +58,7 @@ class RejectedChunk:
     id: str
     company: str
     score: float
-    reason: str = "below_floor"  # "below_floor" | "boilerplate" | "duplicate" | "fusion_cut"
+    reason: str = "below_floor"  # "below_floor" | "boilerplate" | "duplicate" | "fusion_cut" | "reranked_out"
 
 
 @dataclass

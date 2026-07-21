@@ -20,6 +20,8 @@ from app.agent.hybrid_tool import HybridTool
 from app.agent.nodes.route import build_route_llm
 from app.agent.nodes.sql_retrieve import build_sql_llm
 from app.agent.nodes.synthesize import build_synthesis_llm
+from app.agent.reranked_tool import RerankedTool
+from app.agent.reranker import CrossEncoderReranker
 from app.agent.sql_tool import SqlTool
 from app.agent.text_search_tool import TextSearchTool
 from app.agent.vector_tool import VectorTool
@@ -37,14 +39,21 @@ def _build_real_graph(settings: Settings, agent_engine: Engine, pinecone_index: 
     was injected, so offline tests never construct a live LLM/embedder."""
     llm = build_llm(settings)
     embedder = build_embedder(settings)
+    # Retrieval breadth here is rerank_pool_size (wide), not top_k (the
+    # final evidence count) -- RerankedTool below cuts the wide pool back
+    # down to top_k after the cross-encoder ranks it. HybridTool degrades
+    # to dense-only automatically if chunk_text doesn't exist yet (see
+    # text_search_tool.py's fail-open query) -- no feature flag needed.
     vector_tool = VectorTool(
-        pinecone_index, embedder, top_k=settings.top_k, score_floor=settings.score_floor
+        pinecone_index, embedder, top_k=settings.rerank_pool_size, score_floor=settings.score_floor
     )
-    # HybridTool degrades to dense-only automatically if chunk_text doesn't
-    # exist yet (see text_search_tool.py's fail-open query) -- no feature
-    # flag needed, this is safe to wire unconditionally.
     hybrid_tool = HybridTool(
-        vector_tool, TextSearchTool(agent_engine, top_k=settings.top_k), top_k=settings.top_k
+        vector_tool,
+        TextSearchTool(agent_engine, top_k=settings.rerank_pool_size),
+        top_k=settings.rerank_pool_size,
+    )
+    reranked_tool = RerankedTool(
+        hybrid_tool, CrossEncoderReranker(settings.reranker_model), top_k=settings.top_k
     )
     return build_graph(
         coverage=build_coverage(agent_engine),
@@ -52,7 +61,7 @@ def _build_real_graph(settings: Settings, agent_engine: Engine, pinecone_index: 
         sql_llm=build_sql_llm(llm),
         synth_llm=build_synthesis_llm(llm),
         sql_tool=SqlTool(agent_engine, row_limit=settings.sql_row_limit),
-        vector_tool=hybrid_tool,
+        vector_tool=reranked_tool,
         history_max_messages=settings.history_max_messages,
     )
 
