@@ -146,6 +146,45 @@ def test_fabricated_large_number_does_not_collapse_to_a_degenerate_match():
     assert "999,999" in result["verify"]["ungrounded"][0]
 
 
+def test_loss_magnitude_grounds_against_negative_sql_value():
+    # Amazon's 2022 net_income is negative; the draft phrases the magnitude
+    # positively ("a loss of $2,722,000,000"). Sign is carried by the word
+    # "loss", so the positive magnitude must ground against the negative SQL
+    # value rather than fail-close into a refusal.
+    result = _run(
+        final_answer="Amazon posted a net loss of $2,722,000,000 in 2022.",
+        sql_rows=[{"company": "Amazon", "year": 2022, "net_income": -2722000000}],
+    )
+    assert result["verify"]["ok"] is True
+    assert result["verify"]["ungrounded"] == []
+
+
+def test_nonmatching_positive_number_near_a_negative_value_still_fails():
+    # Sign-insensitivity flips only the sign, not the magnitude: a positive
+    # figure that doesn't match the (negated) SQL value at any scale is still
+    # ungrounded.
+    result = _run(
+        final_answer="Amazon posted a net loss of $5,000,000,000 in 2022.",
+        sql_rows=[{"company": "Amazon", "year": 2022, "net_income": -2722000000}],
+    )
+    assert result["verify"]["ok"] is False
+    assert "5,000,000,000" in result["verify"]["ungrounded"][0]
+    assert result["refusal_reason"] == "unverified_numbers"
+
+
+def test_rounded_billions_paraphrase_of_a_non_round_millions_figure_passes():
+    # Regression for the live "verify failed: ['342.7']" veto: prose rounds a
+    # filing table's "342,745" (millions) to "$342.7 billion". The substring
+    # check misses this (342.7 * 1000 == 342700 never appears in "342,745"),
+    # so the rounding-aware chunk-number path must ground it.
+    result = _run(
+        final_answer="Alphabet's total revenue was $342.7 billion.",
+        chunks=[{"company": "Google", "text": "Total revenues were $342,745 for the year."}],
+    )
+    assert result["verify"]["ok"] is True
+    assert result["verify"]["ungrounded"] == []
+
+
 def test_billions_paraphrase_of_a_millions_scale_chunk_figure_passes():
     # 10-K financial statements are conventionally "in millions" ("196,600"),
     # but narrative synthesis often rounds to billions ("$196.6 billion") --
