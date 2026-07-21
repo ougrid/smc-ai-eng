@@ -291,6 +291,79 @@ async def test_stream_veto_final_failure_streams_refusal_as_a_third_draft():
     assert [p["data"]["ok"] for p in verify_parts] == [False, False]
 
 
+def _chain_start_event(name):
+    return {"event": "on_chain_start", "name": name, "tags": [], "data": {"input": {}}}
+
+
+@pytest.mark.asyncio
+async def test_data_status_parts_emitted_on_node_start_in_order_with_fixed_id():
+    envelope_json = json.dumps({"reasoning": "r", "answer": "answer text", "citations": []})
+    scripted = [
+        {
+            "event": "on_chain_end",
+            "name": "route",
+            "tags": [],
+            "data": {"output": {"effective_route": "both", "companies": [], "years": [], "coverage_notes": []}},
+        },
+        # nodes not in the status map (the graph itself, routing) must not
+        # emit a status part
+        _chain_start_event("LangGraph"),
+        _chain_start_event("route"),
+        _chain_start_event("sql_retrieve"),
+        {"event": "on_chain_end", "name": "sql_retrieve", "tags": [], "data": {"output": {"sql_rows": []}}},
+        _chain_start_event("vector_retrieve"),
+        {"event": "on_chain_end", "name": "vector_retrieve", "tags": [], "data": {"output": {"chunks": []}}},
+        _chain_start_event("synthesize"),
+        *_chat_model_stream_events(envelope_json),
+        _synthesize_end_event("answer text"),
+    ]
+
+    parsed = _types_of(await _collect(scripted))
+    status_parts = [p for p in parsed if p["type"] == "data-status"]
+
+    # one per real work node, in node order, unknown chains ignored
+    assert [p["data"]["stage"] for p in status_parts] == ["sql", "vector", "synthesize"]
+    # fixed id so successive emissions reconcile/replace in the AI SDK
+    assert all(p["id"] == "status-1" for p in status_parts)
+    # every status carries a human-facing label
+    assert all(p["data"].get("label") for p in status_parts)
+
+    # the status labels precede the answer text (that's the whole point --
+    # they fill the dead air before synthesis streams)
+    first_status_idx = next(i for i, p in enumerate(parsed) if p["type"] == "data-status")
+    first_text_idx = next(i for i, p in enumerate(parsed) if p["type"] == "text-start")
+    assert first_status_idx < first_text_idx
+
+    # stream is still well-formed AI SDK v1: framed by start/finish
+    kinds = [p["type"] for p in parsed]
+    assert kinds[0] == "start"
+    assert kinds[1] == "start-step"
+    assert kinds[-1] == "finish"
+
+
+@pytest.mark.asyncio
+async def test_synthesize_status_re_emitted_on_verify_retry_with_same_id():
+    envelope_1 = json.dumps({"reasoning": "r", "answer": "fabricated $999,999M", "citations": []})
+    envelope_2 = json.dumps({"reasoning": "r", "answer": "corrected $93,736M", "citations": []})
+    scripted = [
+        _chain_start_event("synthesize"),
+        *_chat_model_stream_events(envelope_1),
+        _synthesize_end_event("fabricated $999,999M"),
+        _verify_event(False, ["999,999"], 1),
+        # retry: synthesize starts again -> status re-emitted under same id
+        _chain_start_event("synthesize"),
+        *_chat_model_stream_events(envelope_2),
+        _synthesize_end_event("corrected $93,736M"),
+        _verify_event(True, [], 2),
+    ]
+
+    parsed = _types_of(await _collect(scripted))
+    status_parts = [p for p in parsed if p["type"] == "data-status"]
+
+    assert [p["data"]["stage"] for p in status_parts] == ["synthesize", "synthesize"]
+    assert all(p["id"] == "status-1" for p in status_parts)
+
+
 def test_sse_helper_keeps_non_ascii_readable():
     line = sse({"type": "text-delta", "delta": "กำไรสุทธิ"})
     assert "กำไรสุทธิ" in line

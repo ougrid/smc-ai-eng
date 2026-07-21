@@ -76,7 +76,7 @@ def _parse_financial_data_sql(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _ground_truth() -> dict[str, Any]:
+def ground_truth() -> dict[str, Any]:
     rows = _parse_financial_data_sql(REPO_ROOT / "data" / "financial_data.sql")
     growth = compute_growth(rows)
     apple_net_income = {
@@ -85,7 +85,7 @@ def _ground_truth() -> dict[str, Any]:
     return {"growth": growth, "apple_net_income": apple_net_income}
 
 
-def _register_throwaway_user(client: httpx.Client) -> str:
+def register_throwaway_user(client: httpx.Client) -> str:
     email = f"eval-{uuid.uuid4().hex[:12]}@example.com"
     resp = client.post(
         "/api/auth/register",
@@ -279,7 +279,7 @@ CASES = [
 
 
 def main() -> int:
-    truth = _ground_truth()
+    truth = ground_truth()
 
     with httpx.Client(base_url=API_URL, timeout=TIMEOUT) as client:
         for attempt in range(30):
@@ -292,7 +292,7 @@ def main() -> int:
             print(f"FATAL: {API_URL} not reachable -- is `make api` running?")
             return 1
 
-        token = _register_throwaway_user(client)
+        token = register_throwaway_user(client)
 
         results: list[tuple[str, bool, str]] = []
         for name, case_fn, needs_truth in CASES:

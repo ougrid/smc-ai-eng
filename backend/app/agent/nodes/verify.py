@@ -49,6 +49,9 @@ def _extract_numbers(text: str) -> list[tuple[str, float, bool]]:
     # claim -- strip the whole bracket (source filenames routinely embed
     # digits, e.g. the "10" in "10K") so it never gets flagged as ungrounded.
     text = re.sub(r"\[[^\]]*\]", "", text)
+    # Prose mentions of SEC filing designators ("its 10-K", "Form 10-Q")
+    # aren't numeric claims either; strip them so the "10" never surfaces.
+    text = re.sub(r"\b10[-‑–]?[KQ]\b", "", text)
     out: list[tuple[str, float, bool]] = []
     for match in _NUMBER_RE.finditer(text):
         token = match.group()
@@ -129,6 +132,45 @@ def _literally_in_chunks(value: float, chunk_text: str) -> bool:
     return any(candidate in chunk_text for candidate in candidates)
 
 
+_CHUNK_NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _chunk_numbers(chunk_text: str) -> list[float]:
+    """Every numeric literal actually present in the retrieved chunk text."""
+    out: list[float] = []
+    for match in _CHUNK_NUMBER_RE.finditer(chunk_text):
+        cleaned = match.group().replace(",", "")
+        try:
+            out.append(float(cleaned))
+        except ValueError:
+            continue
+    return out
+
+
+def _paraphrases_a_chunk_number(value: float, chunk_numbers: list[float]) -> bool:
+    """Grounds a draft figure that ROUNDS a millions-scale chunk figure to
+    billions -- e.g. prose says "$342.7 billion" for a filing table's
+    "342,745". The substring check in `_literally_in_chunks` misses this
+    because 342.7 * 1000 == 342700 never appears verbatim in "342,745"; the
+    rounding to one decimal discarded the trailing digits. Here we compare
+    the draft value against each REAL chunk number at the millions<->billions
+    scales, allowing that same one-decimal rounding. Because it only ever
+    matches numbers actually present in the evidence, it can't ground a
+    fabricated magnitude (a made-up "999,999 billion" is near no real chunk
+    number at any scale)."""
+    if abs(value) < 1:
+        return False
+    target = round(value, 1)
+    for chunk_num in chunk_numbers:
+        for scale in _CHUNK_SCALES:
+            for scaled in (chunk_num / scale, chunk_num * scale):
+                if abs(scaled) < 1:
+                    continue
+                if abs(round(scaled, 1) - target) <= 0.05:
+                    return True
+    return False
+
+
 def _extract_citation_markers(text: str) -> list[tuple[str, str, str]]:
     """-> list of (raw_marker, source, page) for every [Source, p.N]-shaped
     bracket found in the draft answer, in the order they appear."""
@@ -157,14 +199,28 @@ def build_verify_node():
         answer = state.get("final_answer") or ""
         plain, percents = _grounded_pools(state)
         chunk_text = _chunk_text(state)
+        chunk_numbers = _chunk_numbers(chunk_text)
 
         ungrounded: list[str] = []
         for token, value, is_percent in _extract_numbers(answer):
             pool = percents if is_percent else plain
             other_pool = plain if is_percent else percents
-            if _within_tolerance(value, pool) or _within_tolerance(value, other_pool):
+            # Sign-insensitive: a draft token X grounds if X or -X matches an
+            # allowed value. Sign semantics are carried by words ("loss",
+            # "negative"), so a magnitude like "$2,722,000,000" grounds against
+            # a SQL net_income of -2,722,000,000. This can't fabricate a
+            # magnitude -- a positive number that isn't near the (negated)
+            # value at any scale still fails.
+            if (
+                _within_tolerance(value, pool)
+                or _within_tolerance(value, other_pool)
+                or _within_tolerance(-value, pool)
+                or _within_tolerance(-value, other_pool)
+            ):
                 continue
             if _literally_in_chunks(value, chunk_text):
+                continue
+            if _paraphrases_a_chunk_number(value, chunk_numbers):
                 continue
             ungrounded.append(token)
 

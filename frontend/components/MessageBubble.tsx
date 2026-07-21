@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { Check, Copy } from "lucide-react";
+import { Check, CircleQuestionMark, Copy, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button";
 import { CitationList } from "@/components/CitationList";
 import { Markdown } from "@/components/Markdown";
 import { RouteBadge } from "@/components/RouteBadge";
-import { TypingIndicator } from "@/components/TypingIndicator";
+import { TypingDots, TypingIndicator } from "@/components/TypingIndicator";
 
 type RouteData = { route?: string };
 type CoverageData = { notes?: string[] };
 type CitationsData = { sql_rows?: Record<string, unknown>[]; chunks?: Chunk[] };
+type StatusData = { stage?: string; label?: string };
 type VerifyData = { ok?: boolean; ungrounded?: string[]; attempt?: number };
 type Chunk = {
   id: string;
@@ -70,15 +71,22 @@ export function MessageBubble({
   const coverageNotes = partData<CoverageData>(message, "data-coverage")?.notes;
   const citations = partData<CitationsData>(message, "data-citations");
   const verify = partData<VerifyData>(message, "data-verify");
+  // Live progress label (fixed id "status-1" server-side, so this reconciles
+  // to the latest stage rather than accumulating). Only meaningful before the
+  // answer text starts streaming; hidden once it does.
+  const statusLabel = partData<StatusData>(message, "data-status")?.label;
 
   const provisional = isStreaming && !isUser && !verify;
-  const hasContent = Boolean(route || text || citations || verify);
+  const hasContent = Boolean(route || text || citations || verify || statusLabel);
 
   // Nothing has arrived from the graph yet -- show a typing cue instead of
   // an empty bubble.
   if (!isUser && isStreaming && !hasContent) {
     return <TypingIndicator />;
   }
+
+  const isRefusal = !isUser && route === "refuse";
+  const isClarify = !isUser && route === "clarify";
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -91,21 +99,47 @@ export function MessageBubble({
             )}
           </div>
         )}
-        <div
-          className={`group relative rounded-2xl px-4 py-2.5 ${
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted"
-          } ${provisional ? "opacity-70" : ""}`}
-        >
-          {isUser ? (
-            <p className="text-sm">{text}</p>
-          ) : text ? (
-            <Markdown text={text} />
-          ) : (
-            <span className="text-sm italic text-muted-foreground">...</span>
-          )}
-        </div>
+        {isRefusal && text ? (
+          <Alert variant="destructive" className={`w-full ${provisional ? "opacity-70" : ""}`}>
+            <TriangleAlert />
+            <AlertDescription>
+              <Markdown text={text} />
+            </AlertDescription>
+          </Alert>
+        ) : isClarify && text ? (
+          <Alert className={`w-full ${provisional ? "opacity-70" : ""}`}>
+            <CircleQuestionMark />
+            <AlertDescription>
+              <Markdown text={text} />
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div
+            className={`group relative rounded-2xl px-4 py-2.5 ${
+              isUser
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted"
+            } ${provisional ? "opacity-70" : ""}`}
+          >
+            {isUser ? (
+              <p className="text-sm">{text}</p>
+            ) : text ? (
+              <Markdown text={text} />
+            ) : isStreaming ? (
+              // Retrieval/synthesis is running but no answer text yet -- keep
+              // the typing cue alive and label the current stage so the
+              // multi-second wait doesn't read as dead air.
+              <div className="flex flex-col gap-2">
+                <TypingDots />
+                {statusLabel && (
+                  <span className="text-xs text-muted-foreground">{statusLabel}</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-sm italic text-muted-foreground">...</span>
+            )}
+          </div>
+        )}
         {!isUser && !provisional && text && (
           <CopyButton text={text} />
         )}

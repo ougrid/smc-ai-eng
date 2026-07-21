@@ -67,7 +67,7 @@ language the user asks in.
 ## Deliverables
 
 1. Git repo: app source, `docker-compose.yml` for the local data stack, seed/loader scripts.
-2. README: how to bring up the databases, load the data, run the app.
+2. README: how to bring up the databases, load the data, run the app, and all of the technical details and implementation decisions made in the process to showcase the solution. Basically a comprehensive "how it works" doc for a reviewer to understand the design and implementation and get impressed with the solution.
 3. Running app that correctly answers the three baseline questions above.
 
 ## Repo conventions

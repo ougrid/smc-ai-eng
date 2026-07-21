@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     sql_row_limit: int = 100
     history_max_messages: int = 8  # capped verbatim window fed to route + synthesize -- see agent/history.py
 
+    # --- Reranking (post-Day-5): top_k above is the FINAL evidence count,
+    # unchanged in meaning; rerank_pool_size is the wider pre-rerank
+    # retrieval breadth (dense + lexical + fusion) the cross-encoder then
+    # cuts down to top_k -- see agent/reranked_tool.py ---
+    rerank_pool_size: int = 30
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+
     # --- Web ---
     cors_origins: list[str] = ["http://localhost:3000"]
 

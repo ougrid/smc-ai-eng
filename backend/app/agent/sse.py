@@ -107,6 +107,18 @@ class AnswerFieldExtractor:
         return "".join(out)
 
 
+# Node START -> user-facing progress label. Emitted with a FIXED id
+# ("status-1") so each successive emission reconciles/replaces the previous
+# one in the AI SDK, keeping a single live "what's happening now" line rather
+# than a growing list. `synthesize` re-running after a failed verify simply
+# re-emits its status against the same id -- no special handling needed.
+_STATUS_BY_NODE: dict[str, dict[str, str]] = {
+    "sql_retrieve": {"stage": "sql", "label": "Querying financial data…"},
+    "vector_retrieve": {"stage": "vector", "label": "Searching 10-K filings…"},
+    "synthesize": {"stage": "synthesize", "label": "Writing the answer…"},
+}
+
+
 def sse(data: dict[str, Any]) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -136,6 +148,20 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
                     yield sse({"type": "text-start", "id": text_id})
                     text_open = True
                 yield sse({"type": "text-delta", "id": text_id, "delta": piece})
+            continue
+
+        if kind == "on_chain_start" and name in _STATUS_BY_NODE:
+            # Fixed id -> reconciles in place so the frontend shows only the
+            # current stage. Fires on retrieval/synthesis START, before any
+            # text streams, so the typing cue can carry a live label through
+            # the several-second gap that used to read as dead air.
+            yield sse(
+                {
+                    "type": "data-status",
+                    "id": "status-1",
+                    "data": _STATUS_BY_NODE[name],
+                }
+            )
             continue
 
         if kind != "on_chain_end":
