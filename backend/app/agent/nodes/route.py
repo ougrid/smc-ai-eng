@@ -57,12 +57,15 @@ ranking + the "why") -> intent="financial" (NOT vague -- four companies \
 and revenue growth are both present), metrics=["revenue"], route="both" \
 (SQL for the growth numbers, vector for the "why").
 
-For every company mentioned, normalize it to its canonical official name \
-using your own knowledge of real-world brands (e.g. "Facebook"/"IG" -> \
-Meta, the iPhone maker -> Apple, Alphabet -> Google, since this dataset \
-lists Google's parent under the name "Google", not "Alphabet"). If you \
-cannot confidently resolve a mention, set canonical=null and \
-confident=false -- never guess silently, and set route="clarify" with a \
+For every company mentioned, normalize it to the SHORT common brand name as \
+this dataset lists it -- a single word like "Google", "Meta", "Apple", \
+"Amazon", "Microsoft", NOT the full legal entity name ("Amazon" not \
+"Amazon.com, Inc.", "Meta" not "Meta Platforms, Inc.", "Apple" not "Apple \
+Inc."). Use your own knowledge of real-world brands to map aliases (e.g. \
+"Facebook"/"IG" -> Meta, the iPhone maker -> Apple, Alphabet -> Google, \
+since this dataset lists Google's parent under the name "Google", not \
+"Alphabet"). If you cannot confidently resolve a mention, set canonical=null \
+and confident=false -- never guess silently, and set route="clarify" with a \
 clarification question offering your best-guess candidates.
 
 route: "sql" for quantitative questions, "vector" for qualitative/strategy \
