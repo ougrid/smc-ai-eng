@@ -49,6 +49,9 @@ def _extract_numbers(text: str) -> list[tuple[str, float, bool]]:
     # claim -- strip the whole bracket (source filenames routinely embed
     # digits, e.g. the "10" in "10K") so it never gets flagged as ungrounded.
     text = re.sub(r"\[[^\]]*\]", "", text)
+    # Prose mentions of SEC filing designators ("its 10-K", "Form 10-Q")
+    # aren't numeric claims either; strip them so the "10" never surfaces.
+    text = re.sub(r"\b10[-‑–]?[KQ]\b", "", text)
     out: list[tuple[str, float, bool]] = []
     for match in _NUMBER_RE.finditer(text):
         token = match.group()

@@ -45,6 +45,15 @@ def test_years_in_state_are_always_grounded():
     assert result["verify"]["ok"] is True
 
 
+def test_prose_10k_filing_designator_is_not_flagged():
+    result = _run(
+        final_answer="Apple's 10-K highlights services growth; net income was $93,736M in 2024.",
+        sql_rows=[{"company": "Apple", "year": 2024, "net_income": 93736000000}],
+    )
+    assert result["verify"]["ok"] is True
+    assert result["verify"]["ungrounded"] == []
+
+
 def test_page_citation_numbers_are_not_flagged():
     result = _run(
         final_answer="Meta grew due to ad revenue [Meta_10K.pdf, p.12].",
