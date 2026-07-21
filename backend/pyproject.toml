@@ -21,6 +21,21 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
 ]
 
+[project.optional-dependencies]
+eval = [
+    "ragas>=0.4.3",
+    # ragas==0.4.3 unconditionally imports langchain_community.chat_models.vertexai
+    # at module load time (backend/.venv/Lib/site-packages/ragas/llms/base.py),
+    # but that module was removed from langchain-community as part of its
+    # "sunset" deprecation (VertexAI moved to langchain-google-vertexai) --
+    # ragas declares NO version constraint on langchain-community, so an
+    # unpinned install resolves the latest (0.4.x) and breaks. Pinned to the
+    # last pre-sunset release that still has the module. No newer ragas
+    # release exists yet (0.4.3 is latest on PyPI as of this pin) -- revisit
+    # this pin if ragas ships a fix.
+    "langchain-community==0.3.31",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
