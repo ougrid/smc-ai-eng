@@ -6,6 +6,7 @@ const LABELS: Record<string, string> = {
   both: "Hybrid",
   refuse: "Refused",
   clarify: "Needs info",
+  capability: "About me",
 };
 
 const VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -14,6 +15,7 @@ const VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outlin
   both: "secondary",
   refuse: "destructive",
   clarify: "outline",
+  capability: "outline",
 };
 
 export function RouteBadge({ route }: { route?: string | null }) {
