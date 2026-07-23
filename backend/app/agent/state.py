@@ -21,7 +21,7 @@ class AgentState(TypedDict, total=False):
 
     # route node output (route node = LLM call + coverage gate together)
     route: dict[str, Any]  # RouteDecision.model_dump()
-    effective_route: str  # "sql" | "vector" | "both" | "refuse" | "clarify"
+    effective_route: str  # "sql" | "vector" | "both" | "refuse" | "clarify" | "capability"
     companies: list[str]  # canonical, gate-resolved
     vector_companies: list[str]  # subset of companies with an indexed 10-K
     years: list[int]

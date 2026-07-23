@@ -47,6 +47,16 @@ genuinely cannot infer ANY company or ANY metric.
 - "vague": no company named AND no metric inferable (e.g. "How's the \
 company doing?" with nothing else to go on) -- ask a targeted clarifying \
 question in `clarification`.
+- "capability": the user is asking about YOU -- what you can do, what data \
+or companies you cover, what years/metrics are available, how to use you, \
+or examples of questions to ask (e.g. "What can you help me with?", "Which \
+companies' data do you have?", "What data do you have for 2024?", "What can \
+I ask you?"). This is a legitimate, answerable onboarding question -- it is \
+NOT "off_topic" (it's squarely about your scope, not an unrelated subject) \
+and NOT "vague" (there is nothing to clarify -- you can describe your scope \
+directly). Mentioning a bare year with no company/metric ("what data do you \
+have for 2024?") is "capability", not "vague" and not "financial". Set \
+route="capability" for this intent.
 
 metrics: one or more of revenue, gross_profit, operating_income, \
 net_income -- infer these from context, including non-English phrasing \
@@ -71,8 +81,8 @@ clarification question offering your best-guess candidates.
 route: "sql" for quantitative questions, "vector" for qualitative/strategy \
 questions, "both" for hybrid questions (numbers AND an explanation/"why"), \
 "refuse" for off-topic intent, "clarify" for vague intent or any \
-unconfident company mention. Always answer in the same language as the \
-question (language = e.g. "en", "th").
+unconfident company mention, "capability" for capability intent. Always \
+answer in the same language as the question (language = e.g. "en", "th").
 
 CONVERSATION HISTORY: you may see prior turns of this conversation before \
 the latest message, oldest first. Use them to resolve references in the \

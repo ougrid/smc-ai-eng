@@ -1,8 +1,8 @@
 """build_graph wires the LangGraph agent: route -> {refuse, clarify,
-sql_retrieve, vector_retrieve} -> synthesize -> verify -> {END, synthesize
-(retry), refuse}. Every client (LLMs, tools, coverage map) is injected --
-no module singletons -- so a graph can be built entirely from stubs in
-tests.
+capability, sql_retrieve, vector_retrieve} -> synthesize -> verify -> {END,
+synthesize (retry), refuse}. Every client (LLMs, tools, coverage map) is
+injected -- no module singletons -- so a graph can be built entirely from
+stubs in tests.
 
 verify is deterministic and bounded: one retry back into synthesize on a
 failed numeric-consistency check, then a fail-closed refusal on the
@@ -13,6 +13,7 @@ answer (docs/technical-execution-plan.md E6).
 from langgraph.graph import END, StateGraph
 
 from app.agent.coverage import CoverageMap
+from app.agent.nodes.capability import build_capability_node
 from app.agent.nodes.clarify import clarify_node
 from app.agent.nodes.refuse import refuse_node
 from app.agent.nodes.route import RouteLLM, build_route_node
@@ -29,7 +30,7 @@ MAX_VERIFY_ATTEMPTS = 2
 
 def _after_route(state: AgentState) -> str:
     route = state.get("effective_route")
-    if route in ("refuse", "clarify"):
+    if route in ("refuse", "clarify", "capability"):
         return route
     return "vector" if route == "vector" else "sql"  # "sql"/"both" -> SQL half first
 
@@ -64,6 +65,7 @@ def build_graph(
     g.add_node("route", build_route_node(coverage, route_llm, history_max_messages=history_max_messages))
     g.add_node("clarify", clarify_node)
     g.add_node("refuse", refuse_node)
+    g.add_node("capability", build_capability_node(coverage))
     g.add_node("sql_retrieve", build_sql_retrieve_node(sql_llm, sql_tool))
     g.add_node("vector_retrieve", build_vector_retrieve_node(vector_tool))
     g.add_node(
@@ -78,6 +80,7 @@ def build_graph(
         {
             "refuse": "refuse",
             "clarify": "clarify",
+            "capability": "capability",
             "sql": "sql_retrieve",
             "vector": "vector_retrieve",
         },
@@ -92,5 +95,6 @@ def build_graph(
     )
     g.add_edge("refuse", END)
     g.add_edge("clarify", END)
+    g.add_edge("capability", END)
 
     return g.compile()
