@@ -205,6 +205,44 @@ async def test_clarify_sequence_has_no_citations_or_verify_part():
     assert text_delta["delta"] == "Which company do you mean?"
 
 
+@pytest.mark.asyncio
+async def test_capability_sequence_has_no_citations_or_verify_part():
+    scripted = [
+        {
+            "event": "on_chain_end",
+            "name": "route",
+            "tags": [],
+            "data": {
+                "output": {
+                    "effective_route": "capability",
+                    "companies": [],
+                    "years": [],
+                    "coverage_notes": [],
+                }
+            },
+        },
+        {
+            "event": "on_chain_end",
+            "name": "capability",
+            "tags": [],
+            "data": {"output": {"final_answer": "I can help with financials for 49 companies..."}},
+        },
+    ]
+
+    parsed = _types_of(await _collect(scripted))
+    kinds = [p["type"] for p in parsed]
+
+    assert kinds == ["start", "start-step", "data-route", "text-start", "text-delta", "text-end", "data-debug", "finish-step", "finish"]
+    assert not any(p["type"] == "data-citations" for p in parsed)
+    assert not any(p["type"] == "data-verify" for p in parsed)
+
+    data_route = next(p for p in parsed if p["type"] == "data-route")
+    assert data_route["data"]["route"] == "capability"
+
+    text_delta = next(p for p in parsed if p["type"] == "text-delta")
+    assert text_delta["delta"] == "I can help with financials for 49 companies..."
+
+
 def _verify_event(ok, ungrounded, attempt):
     return {
         "event": "on_chain_end",

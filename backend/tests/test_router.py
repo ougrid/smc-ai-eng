@@ -151,6 +151,32 @@ def test_intent_vague_routes_to_clarify_with_question():
     assert result["clarification"] == "Which company do you mean?"
 
 
+def test_intent_capability_routes_to_capability_not_refuse():
+    # "What data do you have?" / "Which companies' data do you have?" must
+    # NOT be misclassified as off_topic (a real UX bug this test guards
+    # against) -- it's a legitimate onboarding question, answered directly.
+    llm = _StubRouteLLM(
+        [
+            _ok(
+                _parsed(
+                    intent="capability",
+                    companies=[],
+                    years=[],
+                    metrics=[],
+                    route="capability",
+                )
+            )
+        ]
+    )
+    result = _run(llm)
+    assert result["effective_route"] == "capability"
+    assert result["refusal_reason"] is None
+
+
+def test_system_prompt_defines_capability_intent():
+    assert "capability" in SYSTEM_PROMPT.lower()
+
+
 def test_unconfident_mention_routes_to_clarify_with_candidates():
     llm = _StubRouteLLM(
         [

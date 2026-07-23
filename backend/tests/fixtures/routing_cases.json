@@ -294,6 +294,50 @@
     }
   },
   {
+    "id": "capability_which_companies",
+    "question": "Which companies' 10-K data do you have?",
+    "route_decision": {
+      "reasoning": "user is asking about the assistant's own scope/capabilities, not a specific company's financials",
+      "intent": "capability",
+      "companies": [],
+      "years": [],
+      "metrics": [],
+      "route": "capability",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "capability",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
+    "id": "capability_what_data_for_2024",
+    "question": "What data do you have for 2024?",
+    "route_decision": {
+      "reasoning": "a bare year with no company/metric asking about scope is capability, not vague or off_topic",
+      "intent": "capability",
+      "companies": [],
+      "years": [2024],
+      "metrics": [],
+      "route": "capability",
+      "clarification": null,
+      "language": "en"
+    },
+    "expected": {
+      "effective_route": "capability",
+      "companies": [],
+      "vector_companies": [],
+      "years": [],
+      "coverage_notes_contains": [],
+      "clarification_expected": false
+    }
+  },
+  {
     "id": "vague_how_is_it_doing",
     "question": "How's the company doing?",
     "route_decision": {
