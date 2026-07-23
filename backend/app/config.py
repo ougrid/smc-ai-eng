@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     score_floor: float = 0.25
     top_k: int = 10  # bumped from 6 on Day 4: more headroom for boilerplate rejects to still leave real matches
     sql_row_limit: int = 100
-    history_max_messages: int = 8  # capped verbatim window fed to route + synthesize -- see agent/history.py
+    history_max_messages: int = 10  # capped verbatim window fed to route + synthesize -- see agent/history.py
 
     # --- Reranking (post-Day-5): top_k above is the FINAL evidence count,
     # unchanged in meaning; rerank_pool_size is the wider pre-rerank
