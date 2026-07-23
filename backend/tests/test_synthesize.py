@@ -158,6 +158,57 @@ def test_absent_history_leaves_message_shape_unchanged():
     assert len(captured["messages"]) == 2  # system + human, exactly as before this feature
 
 
+def test_alias_mapping_note_reaches_the_llm_prompt_when_mention_differs():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="answer"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node(
+        {
+            "question": "What was Facebook's net income in 2024?",
+            "sql_rows": [{"company": "Meta", "year": 2024}],
+            "route": {
+                "companies": [
+                    {"mentioned": "Facebook", "canonical": "Meta", "confident": True}
+                ]
+            },
+        },
+        {},
+    )
+    human_message = captured["messages"][1][1]
+    assert "'Facebook' -> Meta" in human_message
+    assert "Company name mapping" in human_message
+
+
+def test_alias_mapping_note_absent_when_mention_matches_canonical():
+    captured = {}
+
+    class _CapturingLLM:
+        def invoke(self, messages, config=None):
+            captured["messages"] = messages
+            return _ok(_envelope(answer="answer"))
+
+    node = build_synthesize_node(_CapturingLLM())
+    node(
+        {
+            "question": "What was Apple's net income in 2024?",
+            "sql_rows": [{"company": "Apple", "year": 2024}],
+            "route": {
+                "companies": [
+                    {"mentioned": "Apple", "canonical": "Apple", "confident": True}
+                ]
+            },
+        },
+        {},
+    )
+    human_message = captured["messages"][1][1]
+    assert "Company name mapping" not in human_message
+
+
 def test_verify_retry_hint_reaches_the_llm_prompt():
     captured = {}
 
