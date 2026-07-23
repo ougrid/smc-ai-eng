@@ -87,6 +87,20 @@ provided...", "According to the evidence..."). Get to the point naturally. \
 None of this loosens the grounding rules above -- every number and every \
 qualitative claim still comes only from the evidence, with citations.
 
+COMPANY NAME MAPPING: if the evidence below includes a "Company name \
+mapping" note, the user referred to a company using an alias, a former/\
+alternate name, or a descriptive phrase (e.g. "Facebook", "Alphabet", "the \
+iPhone maker") that we resolved to a different canonical name (e.g. "Meta", \
+"Google", "Apple"). You MUST acknowledge this mapping somewhere in the \
+answer -- do not silently substitute the canonical name with no indication \
+you understood the user's phrasing. This is not optional and not a \
+one-time-in-a-while touch: every single time this note is present, name \
+BOTH the term the user used and the canonical name together at least once \
+(e.g. "Facebook (now Meta) grew revenue to..." or "Alphabet, which this \
+data lists as Google, reported..."). Keep it to a brief parenthetical or \
+clause -- don't make it its own paragraph or belabor it -- but never omit \
+it.
+
 INVESTMENT / ADVICE-FLAVORED QUESTIONS ("should I invest in X?", "is X a \
 good buy?"): do NOT refuse these and do NOT give a buy/sell recommendation. \
 Instead, give a grounded, balanced read built ONLY from the retrieved \
@@ -140,8 +154,30 @@ def _has_evidence(state: AgentState) -> bool:
     return bool(state.get("sql_rows") or state.get("chunks"))
 
 
+def _alias_mappings(state: AgentState) -> list[str]:
+    """Mentions the router confidently resolved to a DIFFERENT canonical name
+    (e.g. user said "Facebook", canonical is "Meta") -- surfaced to synthesis
+    so it can acknowledge the mapping in the answer instead of silently
+    substituting the canonical name with no indication it understood the
+    user's phrasing. Purely descriptive of already-resolved structural data
+    (agent/coverage.py already did the resolution) -- no new grounding risk."""
+    mentions = ((state.get("route") or {}).get("companies")) or []
+    notes = []
+    for mention in mentions:
+        canonical = mention.get("canonical")
+        mentioned = mention.get("mentioned")
+        if not mention.get("confident") or not canonical or not mentioned:
+            continue
+        if canonical.strip().lower() != mentioned.strip().lower():
+            notes.append(f"{mentioned!r} -> {canonical}")
+    return notes
+
+
 def _format_evidence(state: AgentState) -> str:
     parts: list[str] = []
+    aliases = _alias_mappings(state)
+    if aliases:
+        parts.append("Company name mapping (acknowledge naturally in the answer): " + "; ".join(aliases))
     if state.get("sql_rows"):
         parts.append(f"SQL rows: {state['sql_rows']}")
     if state.get("computed"):

@@ -205,7 +205,7 @@ async def stream_agent_chat(events: AsyncIterator[dict[str, Any]]) -> AsyncItera
                 }
             )
 
-        elif name in ("refuse", "clarify"):
+        elif name in ("refuse", "clarify", "capability"):
             answer = output.get("final_answer", "")
             yield sse({"type": "text-start", "id": text_id})
             if answer:

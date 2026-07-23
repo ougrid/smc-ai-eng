@@ -95,16 +95,16 @@ class CompanyMentionLike(Protocol):
 
 
 class RouteDecisionLike(Protocol):
-    intent: str  # "financial" | "off_topic" | "vague"
+    intent: str  # "financial" | "off_topic" | "vague" | "capability"
     companies: list[CompanyMentionLike]
     years: list[int]
-    route: str  # "sql" | "vector" | "both" | "refuse" | "clarify"
+    route: str  # "sql" | "vector" | "both" | "refuse" | "clarify" | "capability"
     clarification: str | None
 
 
 @dataclass
 class GateResult:
-    effective_route: str  # "sql" | "vector" | "both" | "refuse" | "clarify"
+    effective_route: str  # "sql" | "vector" | "both" | "refuse" | "clarify" | "capability"
     companies: list[str] = field(default_factory=list)  # canonical, resolved
     vector_companies: list[str] = field(default_factory=list)  # subset with a 10-K
     years: list[int] = field(default_factory=list)
@@ -114,6 +114,8 @@ class GateResult:
 
 
 def apply_gate(decision: RouteDecisionLike, coverage: CoverageMap) -> GateResult:
+    if decision.intent == "capability":
+        return GateResult(effective_route="capability")
     if decision.intent == "off_topic":
         return GateResult(effective_route="refuse", refusal_reason="out_of_scope")
     if decision.intent == "vague":

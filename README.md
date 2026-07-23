@@ -15,6 +15,13 @@ rationale and the day-by-day build log live in [`docs/`](docs/) —
 `docs/implementation-plan.md` (strategy) and `docs/technical-execution-plan.md`
 (code-level contracts), which remain the source of truth for scope decisions.
 
+> **Submission marker.** This take-home was submitted **Tue, 21 Jul 2026, 18:00 ICT**, at commit
+> `803127c` (tagged `submission`). Everything after that point — including this note, the
+> capability-intent routing fix, and the company-name-alias acknowledgment described below — is
+> **post-submission** work, continued for further learning/demonstration and not part of the
+> graded deliverable. `git log submission..HEAD` (or `git diff submission..HEAD`) shows exactly
+> what changed since.
+
 ## Table of contents
 
 - [The hard requirement: no hallucination](#the-hard-requirement-no-hallucination)
@@ -94,6 +101,7 @@ flowchart TD
     G -->|off-topic| REF["<b>refuse</b><br/>bilingual template, no LLM"]
     G -->|"unknown company /<br/>no data / years out of range"| REF
     G -->|"vague / ambiguous mention"| CL["<b>clarify</b><br/>ask the user back<br/>with best-guess candidates"]
+    G -->|"about the assistant itself"| CAP["<b>capability</b><br/>deterministic, no LLM<br/>describes live CoverageMap"]
     G -->|quantitative| SQLT["<b>sql_retrieve</b><br/>LLM SQL → sqlglot allowlist<br/>→ agent_ro read-only role<br/>growth computed in Python"]
     G -->|qualitative| VEC["<b>vector_retrieve</b><br/>per-company: dense + lexical<br/>→ RRF fusion → cross-encoder rerank"]
     G -->|both| SQLT
@@ -106,18 +114,25 @@ flowchart TD
     V -->|"still ungrounded (2nd fail)"| REF
     REF --> A
     CL --> A
+    CAP --> A
 ```
 
 Node responsibilities in one line each:
 
 - **route** (`nodes/route.py`) — one temp-0 structured-output LLM call classifies intent
-  (`financial` / `off_topic` / `vague`), normalizes company mentions to canonical SQL
-  names using the model's own world knowledge (Facebook → Meta, Alphabet → Google, "the
-  iPhone maker" → Apple), extracts years/metrics/language, and proposes a route. History
-  is threaded in so elliptical follow-ups resolve.
+  (`financial` / `off_topic` / `vague` / `capability`), normalizes company mentions to
+  canonical SQL names using the model's own world knowledge (Facebook → Meta, Alphabet →
+  Google, "the iPhone maker" → Apple), extracts years/metrics/language, and proposes a
+  route. History is threaded in so elliptical follow-ups resolve.
 - **coverage gate** (`coverage.py`, invoked inside the route node) — pure Python, no LLM.
   The last line of defense: it runs *after* the router and cannot be talked out of a
   refusal. Downgrades routes, trims out-of-range years, and attaches coverage notes.
+- **capability** (`nodes/capability.py`) — deterministic, no LLM call. Answers questions
+  about the assistant's own scope ("What data do you have?", "Which companies' 10-K data
+  do you have?") directly, built from the same live `CoverageMap` the gate uses — so it
+  can never drift from what's actually loaded. Exists specifically because meta/onboarding
+  questions like these were previously misclassified `off_topic` and hit the scope-refusal
+  template, a real bad-UX bug.
 - **sql_retrieve** (`nodes/sql_retrieve.py` + `sql_tool.py`) — LLM writes one SQL query;
   it is validated by `sqlglot` and executed as a read-only Postgres role. Growth
   percentages are computed in Python (`growth.py`), never by the LLM.
@@ -276,6 +291,17 @@ analyst, not a brittle form validator.
   synthesizer is instructed (as the last thing it reads, for recency) to write the entire
   answer in that language even though all evidence is in English. Refusal and clarify
   templates are fully bilingual.
+- **Capability/onboarding questions get a real answer, not a refusal.** "What data do you
+  have?" or "Which companies' 10-K data do you have?" are legitimate questions a first-time
+  user asks — they used to be misclassified `off_topic` (unrelated to company financials)
+  and hit the scope-refusal template. A 4th router intent, `capability`, catches these and
+  routes to a deterministic node (`nodes/capability.py`) that describes the assistant's
+  actual live coverage — no LLM call, so the numbers can't drift from what's loaded.
+- **Company-name aliases are acknowledged in the answer, not silently substituted.** The
+  router already resolves "Facebook" → Meta and "Alphabet" → Google (world-knowledge
+  entity resolution, see above); `synthesize.py` now surfaces that mapping back into the
+  answer itself, so "What was Facebook's net income?" answers "Meta (formerly Facebook)
+  reported...", confirming to the user that their phrasing was understood correctly.
 
 ## Frontend UX
 
@@ -286,8 +312,8 @@ FastAPI — no hand-rolled SSE parsing. Custom data parts drive the UI
 - **Token streaming** with provisional styling — the answer bubble dims (`opacity-70`) until
   `data-verify` confirms it, so the user can see the model think without mistaking a
   provisional draft for a verified answer.
-- **Route badges** — `SQL` / `10-K` / `Hybrid` / `Refused` / `Needs info`, so every routing
-  decision is visible and demoable.
+- **Route badges** — `SQL` / `10-K` / `Hybrid` / `Refused` / `Needs info` / `About me`, so
+  every routing decision is visible and demoable.
 - **Per-node progress status line** — a `data-status` SSE part (fixed id, reconciled in
   place) carries a live label through the multi-second retrieval gap: *"Querying financial
   data…" → "Searching 10-K filings…" → "Writing the answer…"* under an animated typing cue,
@@ -371,9 +397,12 @@ A harder-edged companion targeting the ways a grounded agent gets tricked: **est
 ("just ballpark it"), **prompt injection** via retrieved 10-K text, **multi-turn year exploits**
 (establishing an in-range year then pivoting out of range), **mixed-coverage comparisons**
 (a company with a 10-K vs. one without), **repeated-refusal variation** (asserting successive
-refusals aren't identical), and **investment questions** (grounded balanced perspective, not a
-blunt refusal). It exercises the [conversation-quality](#conversation-quality) behaviors above
-as testable properties.
+refusals aren't identical), **investment questions** (grounded balanced perspective, not a
+blunt refusal), **capability/onboarding questions** ("What data do you have?", a bare "data for
+2024?") asserting `route=capability` rather than a regression back to the `off_topic` scope
+refusal, and **company-alias acknowledgment** (a "Facebook"/"Alphabet" question's answer must
+name both the user's term and the canonical company). It exercises the
+[conversation-quality](#conversation-quality) behaviors above as testable properties.
 
 ## Auth
 
@@ -589,7 +618,7 @@ to grounding/retrieval:
 | `RERANK_POOL_SIZE` | `30` | Pre-rerank retrieval breadth (Pinecone top-k, full-text LIMIT, and the RRF cap all use it). |
 | `RERANKER_MODEL` | `BAAI/bge-reranker-v2-m3` | Local cross-encoder model name. |
 | `SQL_ROW_LIMIT` | `100` | Cap injected into every validated SQL query. |
-| `HISTORY_MAX_MESSAGES` | `8` | Trailing conversation messages (≈4 exchanges) the router/synthesizer see verbatim. |
+| `HISTORY_MAX_MESSAGES` | `10` | Trailing conversation messages (≈5 exchanges) the router/synthesizer see verbatim. |
 | `JWT_SECRET` / `JWT_EXPIRY_MIN` | *(dev)* / `60` | Change the secret for anything beyond local dev. |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Frontend origins allowed to call the API. |
 

@@ -27,11 +27,11 @@ class RouteDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reasoning: str  # FIRST -- schema field order is generation order
-    intent: Literal["financial", "off_topic", "vague"]
+    intent: Literal["financial", "off_topic", "vague", "capability"]
     companies: list[CompanyMention]  # world-knowledge entity resolution happens here
     years: list[int]
     metrics: list[str]
-    route: Literal["sql", "vector", "both", "refuse", "clarify"]
+    route: Literal["sql", "vector", "both", "refuse", "clarify", "capability"]
     clarification: Optional[str]  # question to ask back; required key, nullable value
     language: str
 

@@ -716,6 +716,104 @@ def case_citation_bait_amazon_aws(client, token, truth) -> None:
     assert_figures_grounded(result["answer"], q, metadata, truth, ["Amazon"])
 
 
+# --- capability intent (meta/onboarding questions must not be refused) ----
+
+_VECTOR_COMPANIES = ("Apple", "Amazon", "Google", "Meta")
+
+
+def _assert_capability_answer(result: dict[str, Any], question: str) -> None:
+    metadata = result["metadata"]
+    _require(
+        metadata.get("route") == "capability",
+        f"expected route=capability for a meta/onboarding question, got "
+        f"{metadata.get('route')!r} -- this is the exact 'off_topic instead "
+        f"of capability' regression: {question!r}",
+    )
+    answer = result["answer"]
+    _require(
+        any(c in answer for c in _VECTOR_COMPANIES),
+        f"capability answer never names any real covered company: {answer!r}",
+    )
+    # It must be a helpful description, not the out-of-scope refusal wording.
+    _require(
+        "outside what i can help with" not in answer.lower()
+        and "i still can't take that one on" not in answer.lower(),
+        f"capability answer reused off-topic refusal phrasing: {answer!r}",
+    )
+
+
+def case_capability_which_companies(client, token, truth) -> None:
+    q = "Which companies' 10-K data do you have?"
+    result = ask(client, token, q)
+    _assert_capability_answer(result, q)
+
+
+def case_capability_generic(client, token, truth) -> None:
+    q = "What can you help me with?"
+    result = ask(client, token, q)
+    _assert_capability_answer(result, q)
+
+
+def case_capability_bare_year(client, token, truth) -> None:
+    # The specific reported bug: a bare year with no company/metric was
+    # misclassified off_topic -> scope refusal, instead of the answerable
+    # "capability" intent.
+    q = "What data do you have for 2024?"
+    result = ask(client, token, q)
+    _assert_capability_answer(result, q)
+
+
+# --- company-alias acknowledgment in the answer itself --------------------
+
+
+def case_alias_facebook_acknowledged(client, token, truth) -> None:
+    q = "What was Facebook's net income in 2024?"
+    result = ask(client, token, q)
+    metadata = result["metadata"]
+    _require(
+        metadata.get("route") in ("sql", "both"),
+        f"expected route=sql/both for a Facebook(->Meta) net income question, got {metadata.get('route')}",
+    )
+    _verify_ok(metadata)
+    answer = result["answer"]
+    _require("Meta" in answer, f"answer never names Meta: {answer!r}")
+    _require(
+        "Facebook" in answer,
+        f"answer never acknowledges the user's term 'Facebook' alongside Meta: {answer!r}",
+    )
+    expected = truth["by_company"]["Meta"][2024]["net_income"]
+    sql_values = _sql_citation_values(metadata)
+    _require(
+        float(expected) in sql_values,
+        f"Meta 2024 net_income citation: expected {expected}, got {sorted(sql_values)}",
+    )
+    assert_figures_grounded(answer, q, metadata, truth, ["Meta"])
+
+
+def case_alias_alphabet_acknowledged(client, token, truth) -> None:
+    q = "What was Alphabet's revenue in 2024?"
+    result = ask(client, token, q)
+    metadata = result["metadata"]
+    _require(
+        metadata.get("route") in ("sql", "both"),
+        f"expected route=sql/both for an Alphabet(->Google) revenue question, got {metadata.get('route')}",
+    )
+    _verify_ok(metadata)
+    answer = result["answer"]
+    _require("Google" in answer, f"answer never names Google: {answer!r}")
+    _require(
+        "Alphabet" in answer,
+        f"answer never acknowledges the user's term 'Alphabet' alongside Google: {answer!r}",
+    )
+    expected = truth["by_company"]["Google"][2024]["revenue"]
+    sql_values = _sql_citation_values(metadata)
+    _require(
+        float(expected) in sql_values,
+        f"Google 2024 revenue citation: expected {expected}, got {sorted(sql_values)}",
+    )
+    assert_figures_grounded(answer, q, metadata, truth, ["Google"])
+
+
 CASES: list[tuple[str, str, Callable]] = [
     (
         "Adversarial: estimate-bait (Apple FY2026 'best guess')",
@@ -791,6 +889,31 @@ CASES: list[tuple[str, str, Callable]] = [
         "Citation positive control: quote Amazon's 10-K on AWS with pages",
         "covered company quoting SHOULD work -- real chunk citations with page numbers",
         case_citation_bait_amazon_aws,
+    ),
+    (
+        "Capability: 'Which companies' 10-K data do you have?'",
+        "meta/onboarding question -> route=capability, NOT off_topic scope refusal",
+        case_capability_which_companies,
+    ),
+    (
+        "Capability: 'What can you help me with?'",
+        "generic capability question -> route=capability with real company names, no refusal",
+        case_capability_generic,
+    ),
+    (
+        "Capability: bare year with no company/metric ('data for 2024?')",
+        "regression case for the exact reported bug -> route=capability, not off_topic/vague",
+        case_capability_bare_year,
+    ),
+    (
+        "Alias acknowledgment: 'Facebook's net income' (-> Meta)",
+        "grounded Meta figure AND the answer names 'Facebook' alongside 'Meta'",
+        case_alias_facebook_acknowledged,
+    ),
+    (
+        "Alias acknowledgment: 'Alphabet's revenue' (-> Google)",
+        "grounded Google figure AND the answer names 'Alphabet' alongside 'Google'",
+        case_alias_alphabet_acknowledged,
     ),
 ]
 
